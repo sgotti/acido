@@ -1,0 +1,13 @@
+[._]*.s[a-w][a-z]
+[._]s[a-w][a-z]
+*.un~
+Session.vim
+.netrwhist
+*~
+.emacs.desktop
+.sw
+gopath/
+bin/
+Godeps/_workspace/
+Godeps/Readme
+acido
