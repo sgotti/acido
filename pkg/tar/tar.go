@@ -31,7 +31,7 @@ Tar:
 		case nil:
 			if pathWhitelist != nil && len(pathWhitelist) > 0 {
 				p := filepath.Clean(hdr.Name)
-				// Check only file inside rootfs
+				// Check only files inside rootfs
 				if strings.HasPrefix(p, "rootfs/") {
 					relpath, err := filepath.Rel("rootfs/", hdr.Name)
 					if err != nil {
@@ -39,11 +39,9 @@ Tar:
 					}
 					//log.Infof("relpath: %s", relpath)
 
-					if err != nil {
-						if _, ok := pathWhitelist[relpath]; !ok {
-							log.Infof("file: %s not in pathWhitelist", hdr.Name)
-							continue
-						}
+					if _, ok := pathWhitelist[relpath]; !ok {
+						log.Infof("file: %s not in pathWhitelist", hdr.Name)
+						continue
 					}
 				}
 			}

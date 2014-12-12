@@ -93,7 +93,6 @@ func renderImage(images *list.List, dir string, ds *cas.Store) error {
 		if img.Level < prevlevel {
 			m := sliceToMap(img.im.PathWhitelist)
 			rootfs := filepath.Join(dir, "rootfs/")
-			// TODO Optimize. By now we count the number of files in every directory to detect empty ones.
 			err = filepath.Walk(rootfs, func(path string, info os.FileInfo, err error) error {
 
 				relpath, err := filepath.Rel(rootfs, path)
