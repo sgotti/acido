@@ -29,7 +29,7 @@ Tar:
 		case io.EOF:
 			break Tar
 		case nil:
-			if pathWhitelist != nil && len(pathWhitelist) > 0 {
+			if len(pathWhitelist) > 0 {
 				p := filepath.Clean(hdr.Name)
 				// Check only files inside rootfs
 				if strings.HasPrefix(p, "rootfs/") {
