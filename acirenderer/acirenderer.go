@@ -81,8 +81,13 @@ func renderImage(images *list.List, dir string, ds *cas.Store) error {
 		if err := ptar.ExtractTar(tar.NewReader(rs), dir, true, sliceToMap(img.im.PathWhitelist)); err != nil {
 			return fmt.Errorf("error extracting ACI: %v", err)
 		}
-		// If the image is an a previous level then apply PathWhiteList
+		// If the image is an a previous level then apply PathWhiteList if not empty
 		if img.Level < prevlevel {
+			prevlevel = img.Level
+
+			if len(img.im.PathWhitelist) == 0 {
+				continue
+			}
 			m := sliceToMap(img.im.PathWhitelist)
 			rootfs := filepath.Join(dir, "rootfs/")
 			err = filepath.Walk(rootfs, func(path string, info os.FileInfo, err error) error {
@@ -113,8 +118,6 @@ func renderImage(images *list.List, dir string, ds *cas.Store) error {
 			}
 
 			removeEmptyDirs(rootfs, rootfs, m)
-
-			prevlevel = img.Level
 		}
 	}
 	return nil
