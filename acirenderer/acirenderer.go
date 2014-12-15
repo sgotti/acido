@@ -38,12 +38,12 @@ func CreateDepList(hash *types.Hash, ds *cas.Store) (*list.List, error) {
 
 		dependencies := img.im.Dependencies
 		for _, d := range dependencies {
-			log.V(1).Infof("Dependency Hash: %s\n", d.Hash)
-			im, err := util.GetImageManifest(&d.Hash, ds)
+			hash := d.Hash
+			im, err := util.GetImageManifest(&hash, ds)
 			if err != nil {
 				return nil, err
 			}
-			depimg := Image{im: im, Hash: &d.Hash, Level: img.Level + 1}
+			depimg := Image{im: im, Hash: &hash, Level: img.Level + 1}
 			images.InsertAfter(depimg, el)
 		}
 	}
