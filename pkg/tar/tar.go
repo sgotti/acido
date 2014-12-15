@@ -75,9 +75,8 @@ func ExtractFile(tr *tar.Reader, file string) ([]byte, error) {
 		hdr, err := tr.Next()
 		switch err {
 		case io.EOF:
-			return nil, nil
+			return nil, fmt.Errorf("File not found")
 		case nil:
-
 			if filepath.Clean(hdr.Name) != filepath.Clean(file) {
 				continue
 			}
