@@ -73,10 +73,11 @@ func renderImage(images *list.List, dir string, ds *cas.Store) error {
 	for el := images.Back(); el != nil; el = el.Prev() {
 		img := el.Value.(Image)
 		rs, err := ds.ReadStream(img.Hash.String())
-		defer rs.Close()
 		if err != nil {
 			return err
 		}
+		// TODO by now all the streams will be closed at the end of the function. Close them at the end of every loop?
+		defer rs.Close()
 		if err := ptar.ExtractTar(tar.NewReader(rs), dir, true, sliceToMap(img.im.PathWhitelist)); err != nil {
 			return fmt.Errorf("error extracting ACI: %v", err)
 		}
