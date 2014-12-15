@@ -12,7 +12,6 @@ import (
 
 	"github.com/appc/spec/schema"
 	"github.com/appc/spec/schema/types"
-	"github.com/coreos/fleet/log"
 	"github.com/coreos/rocket/cas"
 )
 
@@ -34,8 +33,6 @@ func CreateDepList(hash *types.Hash, ds *cas.Store) (*list.List, error) {
 
 	for el := images.Front(); el != nil; el = el.Next() {
 		img := el.Value.(Image)
-		log.V(1).Infof("img: %s\n", img.Hash)
-
 		dependencies := img.im.Dependencies
 		for _, d := range dependencies {
 			hash := d.Hash
@@ -61,11 +58,6 @@ func RenderImage(hashStr string, dir string, ds *cas.Store) error {
 		return err
 	}
 
-	//for el := images.Front(); el != nil; el = el.Next() {
-	//	img := el.Value.(Image)
-	//log.V(1).Infof("img: %v\n", img)
-	//}
-
 	err = renderImage(images, dir, ds)
 	if err != nil {
 		return err
@@ -80,7 +72,6 @@ func renderImage(images *list.List, dir string, ds *cas.Store) error {
 
 	for el := images.Back(); el != nil; el = el.Prev() {
 		img := el.Value.(Image)
-		log.V(1).Infof("img: %s\n", img.Hash)
 		rs, err := ds.ReadStream(img.Hash.String())
 		defer rs.Close()
 		if err != nil {
@@ -108,7 +99,6 @@ func renderImage(images *list.List, dir string, ds *cas.Store) error {
 					return nil
 				}
 				if _, ok := m[relpath]; !ok {
-					log.V(1).Infof("file: %s not in pathWhitelist. Removing", relpath)
 					err := os.Remove(path)
 					if err != nil {
 						return err
@@ -152,7 +142,6 @@ func removeEmptyDirs(rootfs string, dir string, pathWhitelistMap map[string]uint
 			return err
 		}
 		if _, ok := pathWhitelistMap[relpath]; !ok {
-			log.V(1).Infof("Empty dir: %s not in pathWhitelist. Removing", dir)
 			err := os.Remove(dir)
 			if err != nil {
 				return err

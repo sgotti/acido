@@ -10,7 +10,6 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/coreos/fleet/log"
 	"github.com/docker/docker/pkg/system"
 )
 
@@ -37,10 +36,7 @@ Tar:
 					if err != nil {
 						return err
 					}
-					//log.Infof("relpath: %s", relpath)
-
 					if _, ok := pathWhitelist[relpath]; !ok {
-						log.Infof("file: %s not in pathWhitelist", hdr.Name)
 						continue
 					}
 				}
@@ -105,14 +101,12 @@ func ExtractEntry(tr *tar.Reader, hdr *tar.Header, dir string, overwrite bool) e
 		if err == nil {
 			//and if it's a dir remove it and all his childs
 			if info.IsDir() && typ != tar.TypeDir {
-				log.V(1).Infof("%s: Parent was a dir and the new file isn't a dir\n", p)
 				err := os.RemoveAll(p)
 				if err != nil {
 					return err
 				}
 			}
 			if !info.IsDir() && typ != tar.TypeDir {
-				log.V(1).Infof("%s: Parent wasn't a dir and the new file isn't a dir\n", p)
 				err := os.Remove(p)
 				if err != nil {
 					return err
