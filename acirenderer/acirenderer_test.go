@@ -28,6 +28,14 @@ func newTestTar(entries []*testTarEntry) (string, error) {
 	defer t.Close()
 	tw := tar.NewWriter(t)
 	for _, entry := range entries {
+		// Add default mode
+		if entry.header.Mode == 0 {
+			if entry.header.Typeflag == tar.TypeDir {
+				entry.header.Mode = 0755
+			} else {
+				entry.header.Mode = 0644
+			}
+		}
 		if err := tw.WriteHeader(entry.header); err != nil {
 			return "", err
 		}
@@ -45,6 +53,7 @@ type fileInfo struct {
 	path     string
 	typeflag byte
 	size     int64
+	mode     os.FileMode
 }
 
 func newTestAci(entries []*testTarEntry, ds *cas.Store) (string, error) {
@@ -68,25 +77,530 @@ func newTestAci(entries []*testTarEntry, ds *cas.Store) (string, error) {
 	return hash, nil
 }
 
-func TestRenderImage(t *testing.T) {
+func addDependencies(imj string, deps ...types.Dependency) (string, error) {
+	var im schema.ImageManifest
+	err := im.UnmarshalJSON([]byte(imj))
+	if err != nil {
+		return "", err
+	}
+
+	for _, dep := range deps {
+		im.Dependencies = append(im.Dependencies, dep)
+	}
+	imjb, err := im.MarshalJSON()
+	return string(imjb), err
+}
+
+// Test an image with 1 dep. The parent provides a dir not provided by the image.
+func TestDirFromParent(t *testing.T) {
 	storedir, err := ioutil.TempDir("", "storedir")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	ds := cas.NewStore(storedir)
 
-	// Test an image without pathWhiteList
-	imj := []byte(`
+	imj := `
 		{
 		    "acKind": "ImageManifest",
 		    "acVersion": "0.1.1",
 		    "name": "example.com/test01"
 		}
-	`)
+	`
 
 	entries := []*testTarEntry{
 		{
-			contents: string(imj),
+			contents: imj,
+			header: &tar.Header{
+				Name: "manifest",
+				Size: int64(len(imj)),
+			},
+		},
+		// An empty dir
+		{
+			header: &tar.Header{
+				Name:     "rootfs/a",
+				Typeflag: tar.TypeDir,
+			},
+		},
+	}
+
+	hash1, err := newTestAci(entries, ds)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	imj = `
+		{
+		    "acKind": "ImageManifest",
+		    "acVersion": "0.1.1",
+		    "name": "example.com/test02"
+		}
+	`
+
+	h1, _ := types.NewHash(hash1)
+	imj, err = addDependencies(imj,
+		types.Dependency{
+			Name: "example.com/test01",
+			Hash: *h1},
+	)
+
+	entries = []*testTarEntry{
+		{
+			contents: imj,
+			header: &tar.Header{
+				Name: "manifest",
+				Size: int64(len(imj)),
+			},
+		},
+	}
+
+	expectedFiles := []*fileInfo{
+		&fileInfo{path: "manifest", typeflag: tar.TypeReg},
+		&fileInfo{path: "rootfs", typeflag: tar.TypeDir},
+		&fileInfo{path: "rootfs/a", typeflag: tar.TypeDir},
+	}
+
+	hash2, err := newTestAci(entries, ds)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	err = checkRenderImage(hash2, expectedFiles, ds)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+// Test an image with 1 dep. The image provides a dir not provided by the parent.
+func TestNewDir(t *testing.T) {
+	storedir, err := ioutil.TempDir("", "storedir")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	ds := cas.NewStore(storedir)
+
+	imj := `
+		{
+		    "acKind": "ImageManifest",
+		    "acVersion": "0.1.1",
+		    "name": "example.com/test01"
+		}
+	`
+
+	entries := []*testTarEntry{
+		{
+			contents: imj,
+			header: &tar.Header{
+				Name: "manifest",
+				Size: int64(len(imj)),
+			},
+		},
+		// An empty dir
+		{
+			header: &tar.Header{
+				Name:     "rootfs/a",
+				Typeflag: tar.TypeDir,
+			},
+		},
+	}
+
+	hash1, err := newTestAci(entries, ds)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	imj = `
+		{
+		    "acKind": "ImageManifest",
+		    "acVersion": "0.1.1",
+		    "name": "example.com/test02"
+		}
+	`
+
+	h1, _ := types.NewHash(hash1)
+	imj, err = addDependencies(imj,
+		types.Dependency{
+			Name: "example.com/test01",
+			Hash: *h1},
+	)
+
+	entries = []*testTarEntry{
+		{
+			contents: imj,
+			header: &tar.Header{
+				Name: "manifest",
+				Size: int64(len(imj)),
+			},
+		},
+	}
+
+	expectedFiles := []*fileInfo{
+		&fileInfo{path: "manifest", typeflag: tar.TypeReg},
+		&fileInfo{path: "rootfs", typeflag: tar.TypeDir},
+		&fileInfo{path: "rootfs/a", typeflag: tar.TypeDir},
+	}
+
+	hash2, err := newTestAci(entries, ds)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	err = checkRenderImage(hash2, expectedFiles, ds)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+// Test an image with 1 dep. The image overrides dirs modes from the parent dep. Verifies the right permissions.
+func TestDirOverride(t *testing.T) {
+	storedir, err := ioutil.TempDir("", "storedir")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	ds := cas.NewStore(storedir)
+
+	imj := `
+		{
+		    "acKind": "ImageManifest",
+		    "acVersion": "0.1.1",
+		    "name": "example.com/test01"
+		}
+	`
+
+	entries := []*testTarEntry{
+		{
+			contents: imj,
+			header: &tar.Header{
+				Name: "manifest",
+				Size: int64(len(imj)),
+			},
+		},
+		{
+			header: &tar.Header{
+				Name:     "rootfs/a",
+				Typeflag: tar.TypeDir,
+			},
+		},
+	}
+
+	hash1, err := newTestAci(entries, ds)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	imj = `
+		{
+		    "acKind": "ImageManifest",
+		    "acVersion": "0.1.1",
+		    "name": "example.com/test02"
+		}
+	`
+
+	h1, _ := types.NewHash(hash1)
+	imj, err = addDependencies(imj,
+		types.Dependency{
+			Name: "example.com/test01",
+			Hash: *h1},
+	)
+
+	entries = []*testTarEntry{
+		{
+			contents: imj,
+			header: &tar.Header{
+				Name: "manifest",
+				Size: int64(len(imj)),
+			},
+		},
+		// An empty dir
+		{
+			header: &tar.Header{
+				Name:     "rootfs/a",
+				Typeflag: tar.TypeDir,
+				Mode:     0700,
+			},
+		},
+	}
+
+	expectedFiles := []*fileInfo{
+		&fileInfo{path: "manifest", typeflag: tar.TypeReg},
+		&fileInfo{path: "rootfs", typeflag: tar.TypeDir},
+		&fileInfo{path: "rootfs/a", typeflag: tar.TypeDir, mode: 0700},
+	}
+
+	hash2, err := newTestAci(entries, ds)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	err = checkRenderImage(hash2, expectedFiles, ds)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+// Test an image with 1 dep. The parent provides a file not provided by the image.
+func TestFileFromParent(t *testing.T) {
+	storedir, err := ioutil.TempDir("", "storedir")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	ds := cas.NewStore(storedir)
+
+	imj := `
+		{
+		    "acKind": "ImageManifest",
+		    "acVersion": "0.1.1",
+		    "name": "example.com/test01"
+		}
+	`
+
+	entries := []*testTarEntry{
+		{
+			contents: imj,
+			header: &tar.Header{
+				Name: "manifest",
+				Size: int64(len(imj)),
+			},
+		},
+		{
+			contents: "hello",
+			header: &tar.Header{
+				Name: "rootfs/a/file01.txt",
+				Size: 5,
+			},
+		},
+	}
+
+	hash1, err := newTestAci(entries, ds)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	imj = `
+		{
+		    "acKind": "ImageManifest",
+		    "acVersion": "0.1.1",
+		    "name": "example.com/test02"
+		}
+	`
+
+	h1, _ := types.NewHash(hash1)
+	imj, err = addDependencies(imj,
+		types.Dependency{
+			Name: "example.com/test01",
+			Hash: *h1},
+	)
+
+	entries = []*testTarEntry{
+		{
+			contents: imj,
+			header: &tar.Header{
+				Name: "manifest",
+				Size: int64(len(imj)),
+			},
+		},
+	}
+
+	expectedFiles := []*fileInfo{
+		&fileInfo{path: "manifest", typeflag: tar.TypeReg},
+		&fileInfo{path: "rootfs", typeflag: tar.TypeDir},
+		&fileInfo{path: "rootfs/a", typeflag: tar.TypeDir},
+		&fileInfo{path: "rootfs/a/file01.txt", typeflag: tar.TypeReg, size: 5},
+	}
+
+	hash2, err := newTestAci(entries, ds)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	err = checkRenderImage(hash2, expectedFiles, ds)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+// Test an image with 1 dep. The image provides a file not provided by the parent.
+func TestNewFile(t *testing.T) {
+	storedir, err := ioutil.TempDir("", "storedir")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	ds := cas.NewStore(storedir)
+
+	imj := `
+		{
+		    "acKind": "ImageManifest",
+		    "acVersion": "0.1.1",
+		    "name": "example.com/test01"
+		}
+	`
+
+	entries := []*testTarEntry{
+		{
+			contents: imj,
+			header: &tar.Header{
+				Name: "manifest",
+				Size: int64(len(imj)),
+			},
+		},
+	}
+
+	hash1, err := newTestAci(entries, ds)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	imj = `
+		{
+		    "acKind": "ImageManifest",
+		    "acVersion": "0.1.1",
+		    "name": "example.com/test02"
+		}
+	`
+
+	h1, _ := types.NewHash(hash1)
+	imj, err = addDependencies(imj,
+		types.Dependency{
+			Name: "example.com/test01",
+			Hash: *h1},
+	)
+
+	entries = []*testTarEntry{
+		{
+			contents: imj,
+			header: &tar.Header{
+				Name: "manifest",
+				Size: int64(len(imj)),
+			},
+		},
+		{
+			contents: "hellohello",
+			header: &tar.Header{
+				Name: "rootfs/a/file01.txt",
+				Size: 10,
+			},
+		},
+	}
+
+	expectedFiles := []*fileInfo{
+		&fileInfo{path: "manifest", typeflag: tar.TypeReg},
+		&fileInfo{path: "rootfs", typeflag: tar.TypeDir},
+		&fileInfo{path: "rootfs/a", typeflag: tar.TypeDir},
+		&fileInfo{path: "rootfs/a/file01.txt", typeflag: tar.TypeReg, size: 10},
+	}
+
+	hash2, err := newTestAci(entries, ds)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	err = checkRenderImage(hash2, expectedFiles, ds)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+// Test an image with 1 dep. The image overrides a file already provided by the parent dep.
+func TestFileOverride(t *testing.T) {
+	storedir, err := ioutil.TempDir("", "storedir")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	ds := cas.NewStore(storedir)
+
+	imj := `
+		{
+		    "acKind": "ImageManifest",
+		    "acVersion": "0.1.1",
+		    "name": "example.com/test01"
+		}
+	`
+
+	entries := []*testTarEntry{
+		{
+			contents: imj,
+			header: &tar.Header{
+				Name: "manifest",
+				Size: int64(len(imj)),
+			},
+		},
+		{
+			contents: "hello",
+			header: &tar.Header{
+				Name: "rootfs/a/file01.txt",
+				Size: 5,
+			},
+		},
+	}
+
+	hash1, err := newTestAci(entries, ds)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	imj = `
+		{
+		    "acKind": "ImageManifest",
+		    "acVersion": "0.1.1",
+		    "name": "example.com/test02"
+		}
+	`
+
+	h1, _ := types.NewHash(hash1)
+	imj, err = addDependencies(imj,
+		types.Dependency{
+			Name: "example.com/test01",
+			Hash: *h1},
+	)
+
+	entries = []*testTarEntry{
+		{
+			contents: imj,
+			header: &tar.Header{
+				Name: "manifest",
+				Size: int64(len(imj)),
+			},
+		},
+		{
+			contents: "hellohello",
+			header: &tar.Header{
+				Name: "rootfs/a/file01.txt",
+				Size: 10,
+			},
+		},
+	}
+
+	expectedFiles := []*fileInfo{
+		&fileInfo{path: "manifest", typeflag: tar.TypeReg},
+		&fileInfo{path: "rootfs", typeflag: tar.TypeDir},
+		&fileInfo{path: "rootfs/a", typeflag: tar.TypeDir},
+		&fileInfo{path: "rootfs/a/file01.txt", typeflag: tar.TypeReg, size: 10},
+	}
+
+	hash2, err := newTestAci(entries, ds)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	err = checkRenderImage(hash2, expectedFiles, ds)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestPWLOnlyParent(t *testing.T) {
+	storedir, err := ioutil.TempDir("", "storedir")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	ds := cas.NewStore(storedir)
+
+	imj := `
+		{
+		    "acKind": "ImageManifest",
+		    "acVersion": "0.1.1",
+		    "name": "example.com/test01",
+		    "pathWhitelist" : [ "/a/file01.txt", "/a/file02.txt", "/b/link01.txt", "/c/", "/d/" ]
+		}
+	`
+
+	entries := []*testTarEntry{
+		{
+			contents: imj,
 			header: &tar.Header{
 				Name: "manifest",
 				Size: int64(len(imj)),
@@ -106,6 +620,7 @@ func TestRenderImage(t *testing.T) {
 				Size: 5,
 			},
 		},
+		// It should not appear in rendered aci
 		{
 			contents: "hello",
 			header: &tar.Header{
@@ -120,10 +635,89 @@ func TestRenderImage(t *testing.T) {
 				Typeflag: tar.TypeSymlink,
 			},
 		},
+		// The files should not appear and a new file02.txt should appear but the directory should be left with its permissions
+		{
+			header: &tar.Header{
+				Name:     "rootfs/c",
+				Typeflag: tar.TypeDir,
+				Mode:     0700,
+			},
+		},
 		{
 			contents: "hello",
 			header: &tar.Header{
-				Name: "rootfs/c/file04.txt",
+				Name: "rootfs/c/file01.txt",
+				Size: 5,
+				Mode: 0700,
+			},
+		},
+		// The files should not appear but the directory should be left and also its permissions
+		{
+			header: &tar.Header{
+				Name:     "rootfs/d",
+				Typeflag: tar.TypeDir,
+				Mode:     0700,
+			},
+		},
+		{
+			contents: "hello",
+			header: &tar.Header{
+				Name: "rootfs/d/file01.txt",
+				Size: 5,
+				Mode: 0700,
+			},
+		},
+		// The files and the directory should not appear
+		{
+			contents: "hello",
+			header: &tar.Header{
+				Name: "rootfs/e/file01.txt",
+				Size: 5,
+				Mode: 0700,
+			},
+		},
+	}
+
+	hash1, err := newTestAci(entries, ds)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	imj = `
+		{
+		    "acKind": "ImageManifest",
+		    "acVersion": "0.1.1",
+		    "name": "example.com/test02"
+		}
+	`
+
+	h1, _ := types.NewHash(hash1)
+	imj, err = addDependencies(imj,
+		types.Dependency{
+			Name: "example.com/test01",
+			Hash: *h1},
+	)
+
+	entries = []*testTarEntry{
+		{
+			contents: imj,
+			header: &tar.Header{
+				Name: "manifest",
+				Size: int64(len(imj)),
+			},
+		},
+		{
+			contents: "hellohello",
+			header: &tar.Header{
+				Name: "rootfs/b/file01.txt",
+				Size: 10,
+			},
+		},
+		// New file
+		{
+			contents: "hello",
+			header: &tar.Header{
+				Name: "rootfs/c/file02.txt",
 				Size: 5,
 			},
 		},
@@ -135,41 +729,48 @@ func TestRenderImage(t *testing.T) {
 		&fileInfo{path: "rootfs/a", typeflag: tar.TypeDir},
 		&fileInfo{path: "rootfs/a/file01.txt", typeflag: tar.TypeReg, size: 5},
 		&fileInfo{path: "rootfs/a/file02.txt", typeflag: tar.TypeReg, size: 5},
-		&fileInfo{path: "rootfs/a/file03.txt", typeflag: tar.TypeReg, size: 5},
 		&fileInfo{path: "rootfs/b", typeflag: tar.TypeDir},
 		&fileInfo{path: "rootfs/b/link01.txt", typeflag: tar.TypeSymlink},
-		&fileInfo{path: "rootfs/c", typeflag: tar.TypeDir},
-		&fileInfo{path: "rootfs/c/file04.txt", typeflag: tar.TypeReg, size: 5},
+		&fileInfo{path: "rootfs/b/file01.txt", typeflag: tar.TypeReg, size: 10},
+		&fileInfo{path: "rootfs/c", typeflag: tar.TypeDir, mode: 0700},
+		&fileInfo{path: "rootfs/c/file02.txt", typeflag: tar.TypeReg, size: 5},
+		&fileInfo{path: "rootfs/d", typeflag: tar.TypeDir, mode: 0700},
 	}
 
-	hash1, err := newTestAci(entries, ds)
+	hash2, err := newTestAci(entries, ds)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	err = checkRenderImage(hash1, expectedFiles, ds)
+	err = checkRenderImage(hash2, expectedFiles, ds)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+}
 
-	// Test an image with pathWhiteList excluding a file provided by the same image (strange but it can happen)
-	// rootfs/a/file03.txt is excluded
-	imj = []byte(`
+func TestPWLOnlyImage(t *testing.T) {
+	storedir, err := ioutil.TempDir("", "storedir")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	ds := cas.NewStore(storedir)
+
+	imj := `
 		{
 		    "acKind": "ImageManifest",
 		    "acVersion": "0.1.1",
-		    "name": "example.com/test02",
-		    "pathWhitelist" : [ "/a/file01.txt", "/a/file02.txt", "/b/link01.txt", "/c/file04.txt" ]
+		    "name": "example.com/test01"
 		}
-	`)
+	`
 
-	entries = []*testTarEntry{
+	entries := []*testTarEntry{
 		{
-			contents: string(imj),
+			contents: imj,
 			header: &tar.Header{
 				Name: "manifest",
 				Size: int64(len(imj)),
 			},
 		},
+		// It should be overriden by the one provided by the upper image in rendered aci
 		{
 			contents: "hello",
 			header: &tar.Header{
@@ -184,11 +785,12 @@ func TestRenderImage(t *testing.T) {
 				Size: 5,
 			},
 		},
+		// It should not appear in rendered aci
 		{
-			contents: "hellohello",
+			contents: "hello",
 			header: &tar.Header{
 				Name: "rootfs/a/file03.txt",
-				Size: 10,
+				Size: 5,
 			},
 		},
 		{
@@ -198,16 +800,96 @@ func TestRenderImage(t *testing.T) {
 				Typeflag: tar.TypeSymlink,
 			},
 		},
+		// The files should not appear and a new file02.txt should appear but the directory should be left with its permissions
+		{
+			header: &tar.Header{
+				Name:     "rootfs/c",
+				Typeflag: tar.TypeDir,
+				Mode:     0700,
+			},
+		},
 		{
 			contents: "hello",
 			header: &tar.Header{
-				Name: "rootfs/c/file04.txt",
+				Name: "rootfs/c/file01.txt",
+				Size: 5,
+				Mode: 0700,
+			},
+		},
+		// The files should not appear but the directory should be left and also its permissions
+		{
+			header: &tar.Header{
+				Name:     "rootfs/d",
+				Typeflag: tar.TypeDir,
+				Mode:     0700,
+			},
+		},
+		{
+			contents: "hello",
+			header: &tar.Header{
+				Name: "rootfs/d/file01.txt",
+				Size: 5,
+				Mode: 0700,
+			},
+		},
+		// The files and the directory should not appear
+		{
+			contents: "hello",
+			header: &tar.Header{
+				Name: "rootfs/e/file01.txt",
+				Size: 5,
+				Mode: 0700,
+			},
+		},
+	}
+
+	hash1, err := newTestAci(entries, ds)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	imj = `
+		{
+		    "acKind": "ImageManifest",
+		    "acVersion": "0.1.1",
+		    "name": "example.com/test02",
+		    "pathWhitelist" : [ "/a/file01.txt", "/a/file02.txt", "/b/link01.txt", "/b/file01.txt", "/c/file02.txt", "/d/" ]
+		}
+	`
+
+	h1, _ := types.NewHash(hash1)
+	imj, err = addDependencies(imj,
+		types.Dependency{
+			Name: "example.com/test01",
+			Hash: *h1},
+	)
+
+	entries = []*testTarEntry{
+		{
+			contents: imj,
+			header: &tar.Header{
+				Name: "manifest",
+				Size: int64(len(imj)),
+			},
+		},
+		{
+			contents: "hellohello",
+			header: &tar.Header{
+				Name: "rootfs/b/file01.txt",
+				Size: 10,
+			},
+		},
+		// New file
+		{
+			contents: "hello",
+			header: &tar.Header{
+				Name: "rootfs/c/file02.txt",
 				Size: 5,
 			},
 		},
 	}
 
-	expectedFiles = []*fileInfo{
+	expectedFiles := []*fileInfo{
 		&fileInfo{path: "manifest", typeflag: tar.TypeReg},
 		&fileInfo{path: "rootfs", typeflag: tar.TypeDir},
 		&fileInfo{path: "rootfs/a", typeflag: tar.TypeDir},
@@ -215,8 +897,10 @@ func TestRenderImage(t *testing.T) {
 		&fileInfo{path: "rootfs/a/file02.txt", typeflag: tar.TypeReg, size: 5},
 		&fileInfo{path: "rootfs/b", typeflag: tar.TypeDir},
 		&fileInfo{path: "rootfs/b/link01.txt", typeflag: tar.TypeSymlink},
-		&fileInfo{path: "rootfs/c", typeflag: tar.TypeDir},
-		&fileInfo{path: "rootfs/c/file04.txt", typeflag: tar.TypeReg, size: 5},
+		&fileInfo{path: "rootfs/b/file01.txt", typeflag: tar.TypeReg, size: 10},
+		&fileInfo{path: "rootfs/c", typeflag: tar.TypeDir, mode: 0700},
+		&fileInfo{path: "rootfs/c/file02.txt", typeflag: tar.TypeReg, size: 5},
+		&fileInfo{path: "rootfs/d", typeflag: tar.TypeDir, mode: 0700},
 	}
 
 	hash2, err := newTestAci(entries, ds)
@@ -227,50 +911,65 @@ func TestRenderImage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+}
 
-	// Test an image with a pathwhitelist and 1 dep on an image without pathWhiteList
-
-	// "/c/" is en empty dir to keep
-	imj = []byte(`
-		{
-		    "acKind": "ImageManifest",
-		    "acVersion": "0.1.1",
-		    "name": "example.com/test03",
-		    "pathWhitelist" : [ "/a/file01.txt", "/a/file02.txt", "/b/link01.txt", "/c/", "/d/file05.txt" ]
-		}
-	`)
-	var im schema.ImageManifest
-	im.UnmarshalJSON([]byte(imj))
-
-	h1, _ := types.NewHash(hash1)
-	im.Dependencies = types.Dependencies{
-		types.Dependency{
-			Name: "example.com/test01",
-			Hash: *h1},
-	}
-	imj, err = im.MarshalJSON()
+// Test an image with a pathwhitelist and 2 deps (first without pathWhiteList and the second with pathWhiteList)
+func Test2Deps1(t *testing.T) {
+	storedir, err := ioutil.TempDir("", "storedir")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+	ds := cas.NewStore(storedir)
 
-	entries = []*testTarEntry{
+	imj := `
 		{
-			contents: string(imj),
+		    "acKind": "ImageManifest",
+		    "acVersion": "0.1.1",
+		    "name": "example.com/test01",
+		    "pathWhitelist" : [ "/a/file01.txt", "/a/file02.txt", "/a/file03.txt", "/a/file04.txt", "/b/link01.txt", "/b/file01.txt" ]
+		}
+	`
+
+	entries := []*testTarEntry{
+		{
+			contents: imj,
 			header: &tar.Header{
 				Name: "manifest",
 				Size: int64(len(imj)),
 			},
 		},
-		// Updated file
+		// It should be overriden by the one provided by the upper image
 		{
-			contents: "hellohello",
+			contents: "hello",
 			header: &tar.Header{
 				Name: "rootfs/a/file01.txt",
-				Size: 10,
+				Size: 5,
 			},
 		},
-		// rootfs/a/file02.txt unchanged
-		// rootfs/a/file03.txt removed (see pathWhiteList)
+		// It should be overriden by the one provided by the next dep
+		{
+			contents: "hello",
+			header: &tar.Header{
+				Name: "rootfs/a/file02.txt",
+				Size: 5,
+			},
+		},
+		// It should remain this
+		{
+			contents: "hello",
+			header: &tar.Header{
+				Name: "rootfs/a/file03.txt",
+				Size: 5,
+			},
+		},
+		// It should not appear in rendered aci
+		{
+			contents: "hello",
+			header: &tar.Header{
+				Name: "rootfs/a/file04.txt",
+				Size: 5,
+			},
+		},
 		{
 			header: &tar.Header{
 				Name:     "rootfs/b/link01.txt",
@@ -278,316 +977,328 @@ func TestRenderImage(t *testing.T) {
 				Typeflag: tar.TypeSymlink,
 			},
 		},
-		// New file
+	}
+
+	hash1, err := newTestAci(entries, ds)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	imj = `
+		{
+		    "acKind": "ImageManifest",
+		    "acVersion": "0.1.1",
+		    "name": "example.com/test02"
+		}
+	`
+
+	entries = []*testTarEntry{
+		{
+			contents: imj,
+			header: &tar.Header{
+				Name: "manifest",
+				Size: int64(len(imj)),
+			},
+		},
+		// It should be overriden by the one provided by the upper image
+		{
+			contents: "hellohello",
+			header: &tar.Header{
+				Name: "rootfs/a/file01.txt",
+				Size: 10,
+			},
+		},
+		{
+			contents: "hellohello",
+			header: &tar.Header{
+				Name: "rootfs/a/file02.txt",
+				Size: 10,
+			},
+		},
 		{
 			contents: "hello",
 			header: &tar.Header{
-				Name: "rootfs/d/file05.txt",
+				Name: "rootfs/b/file01.txt",
 				Size: 5,
 			},
 		},
 	}
 
-	expectedFiles = []*fileInfo{
-		&fileInfo{path: "manifest", typeflag: tar.TypeReg},
-		&fileInfo{path: "rootfs", typeflag: tar.TypeDir},
-		&fileInfo{path: "rootfs/a", typeflag: tar.TypeDir},
-		&fileInfo{path: "rootfs/b", typeflag: tar.TypeDir},
-		&fileInfo{path: "rootfs/a/file01.txt", typeflag: tar.TypeReg, size: 10},
-		&fileInfo{path: "rootfs/a/file02.txt", typeflag: tar.TypeReg, size: 5},
-		&fileInfo{path: "rootfs/b/link01.txt", typeflag: tar.TypeSymlink},
-		&fileInfo{path: "rootfs/c", typeflag: tar.TypeDir},
-		&fileInfo{path: "rootfs/d", typeflag: tar.TypeDir},
-		&fileInfo{path: "rootfs/d/file05.txt", typeflag: tar.TypeReg, size: 5},
+	hash2, err := newTestAci(entries, ds)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	imj = `
+		{
+		    "acKind": "ImageManifest",
+		    "acVersion": "0.1.1",
+		    "name": "example.com/test03",
+		    "pathWhitelist" : [ "/a/file01.txt", "/a/file02.txt", "/a/file03.txt", "/b/link01.txt", "/b/file01.txt", "/b/file02.txt", "/c/file01.txt" ]
+		}
+	`
+
+	h1, _ := types.NewHash(hash1)
+	h2, _ := types.NewHash(hash2)
+	imj, err = addDependencies(imj,
+		types.Dependency{
+			Name: "example.com/test01",
+			Hash: *h1},
+		types.Dependency{
+			Name: "example.com/test02",
+			Hash: *h2},
+	)
+
+	entries = []*testTarEntry{
+		{
+			contents: imj,
+			header: &tar.Header{
+				Name: "manifest",
+				Size: int64(len(imj)),
+			},
+		},
+		// Overridden
+		{
+			contents: "hellohellohello",
+			header: &tar.Header{
+				Name: "rootfs/a/file01.txt",
+				Size: 15,
+			},
+		},
+		{
+			contents: "hello",
+			header: &tar.Header{
+				Name: "rootfs/b/file02.txt",
+				Size: 5,
+			},
+		},
+		{
+			contents: "hello",
+			header: &tar.Header{
+				Name: "rootfs/c/file01.txt",
+				Size: 5,
+			},
+		},
 	}
 
 	hash3, err := newTestAci(entries, ds)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+
+	expectedFiles := []*fileInfo{
+		&fileInfo{path: "manifest", typeflag: tar.TypeReg},
+		&fileInfo{path: "rootfs", typeflag: tar.TypeDir},
+		&fileInfo{path: "rootfs/a", typeflag: tar.TypeDir},
+		&fileInfo{path: "rootfs/a/file01.txt", typeflag: tar.TypeReg, size: 15},
+		&fileInfo{path: "rootfs/a/file02.txt", typeflag: tar.TypeReg, size: 10},
+		&fileInfo{path: "rootfs/a/file03.txt", typeflag: tar.TypeReg, size: 5},
+		&fileInfo{path: "rootfs/b", typeflag: tar.TypeDir},
+		&fileInfo{path: "rootfs/b/link01.txt", typeflag: tar.TypeSymlink},
+		&fileInfo{path: "rootfs/b/file01.txt", typeflag: tar.TypeReg, size: 5},
+		&fileInfo{path: "rootfs/b/file02.txt", typeflag: tar.TypeReg, size: 5},
+		&fileInfo{path: "rootfs/c", typeflag: tar.TypeDir},
+		&fileInfo{path: "rootfs/c/file01.txt", typeflag: tar.TypeReg, size: 5},
+	}
+
 	err = checkRenderImage(hash3, expectedFiles, ds)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+}
 
-	// Test an image without a pathwhitelist and 1 dep on an image with pathWhiteList
-	imj = []byte(`
+// Test an image with a pathwhitelist and 2 deps (first without pathWhiteList and the second with pathWhiteList)
+func Test2Deps2(t *testing.T) {
+	storedir, err := ioutil.TempDir("", "storedir")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	ds := cas.NewStore(storedir)
+
+	imj := `
 		{
 		    "acKind": "ImageManifest",
 		    "acVersion": "0.1.1",
-		    "name": "example.com/test04"
+		    "name": "example.com/test01"
 		}
-	`)
-	err = im.UnmarshalJSON([]byte(imj))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	`
 
-	h2, _ := types.NewHash(hash2)
-	im.Dependencies = types.Dependencies{
-		types.Dependency{
-			Name: "example.com/test02",
-			Hash: *h2},
-	}
-	imj, err = im.MarshalJSON()
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	entries = []*testTarEntry{
+	entries := []*testTarEntry{
 		{
-			contents: string(imj),
+			contents: imj,
 			header: &tar.Header{
 				Name: "manifest",
 				Size: int64(len(imj)),
 			},
 		},
-		// Updated file
-		{
-			contents: "hellohello",
-			header: &tar.Header{
-				Name: "rootfs/a/file01.txt",
-				Size: 10,
-			},
-		},
-		// rootfs/a/file02.txt unchanged
-		{
-			header: &tar.Header{
-				Name:     "rootfs/b/link01.txt",
-				Linkname: "file01.txt",
-				Typeflag: tar.TypeSymlink,
-			},
-		},
-		// New file
+		// It should be overriden by the one provided by the upper image
 		{
 			contents: "hello",
 			header: &tar.Header{
-				Name: "rootfs/d/file05.txt",
+				Name: "rootfs/a/file01.txt",
 				Size: 5,
 			},
 		},
-		// New Empty dir
+		// It should be overriden by the one provided by the next dep
 		{
+			contents: "hello",
 			header: &tar.Header{
-				Name:     "rootfs/e",
-				Typeflag: tar.TypeDir,
+				Name: "rootfs/a/file02.txt",
+				Size: 5,
 			},
 		},
-	}
-
-	expectedFiles = []*fileInfo{
-		&fileInfo{path: "manifest", typeflag: tar.TypeReg},
-		&fileInfo{path: "rootfs", typeflag: tar.TypeDir},
-		&fileInfo{path: "rootfs/a", typeflag: tar.TypeDir},
-		&fileInfo{path: "rootfs/b", typeflag: tar.TypeDir},
-		&fileInfo{path: "rootfs/a/file01.txt", typeflag: tar.TypeReg, size: 10},
-		&fileInfo{path: "rootfs/a/file02.txt", typeflag: tar.TypeReg, size: 5},
-		&fileInfo{path: "rootfs/b/link01.txt", typeflag: tar.TypeSymlink},
-		&fileInfo{path: "rootfs/c", typeflag: tar.TypeDir},
-		&fileInfo{path: "rootfs/c/file04.txt", typeflag: tar.TypeReg, size: 5},
-		&fileInfo{path: "rootfs/d", typeflag: tar.TypeDir},
-		&fileInfo{path: "rootfs/d/file05.txt", typeflag: tar.TypeReg, size: 5},
-		&fileInfo{path: "rootfs/e", typeflag: tar.TypeDir},
-	}
-
-	hash4, err := newTestAci(entries, ds)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	err = checkRenderImage(hash4, expectedFiles, ds)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	// Test an image with a pathwhitelist and 1 dep on an image with pathWhiteList
-	// "/c/" is en empty dir to keep
-	imj = []byte(`
+		// It should remain this
 		{
-		    "acKind": "ImageManifest",
-		    "acVersion": "0.1.1",
-		    "name": "example.com/test05",
-		    "pathWhitelist" : [ "/a/file01.txt", "/a/file02.txt", "/a/file03.txt", "/b/link01.txt", "/c/", "/d/file05.txt", "/e/" ]
-		}
-	`)
-	im.UnmarshalJSON([]byte(imj))
-
-	h2, _ = types.NewHash(hash2)
-	im.Dependencies = types.Dependencies{
-		types.Dependency{
-			Name: "example.com/test02",
-			Hash: *h2},
-	}
-	imj, err = im.MarshalJSON()
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	entries = []*testTarEntry{
-		{
-			contents: string(imj),
-			header: &tar.Header{
-				Name: "manifest",
-				Size: int64(len(imj)),
-			},
-		},
-		// Updated file
-		{
-			contents: "hellohello",
-			header: &tar.Header{
-				Name: "rootfs/a/file01.txt",
-				Size: 10,
-			},
-		},
-		// rootfs/a/file02.txt unchanged
-		{
-			header: &tar.Header{
-				Name:     "rootfs/b/link01.txt",
-				Linkname: "file01.txt",
-				Typeflag: tar.TypeSymlink,
-			},
-		},
-		// This file was removed from the dep's pathWhiteList and now readded
-		{
-			contents: "hellohellohello",
+			contents: "hello",
 			header: &tar.Header{
 				Name: "rootfs/a/file03.txt",
-				Size: 15,
-			},
-		},
-		// New file
-		{
-			contents: "hello",
-			header: &tar.Header{
-				Name: "rootfs/d/file05.txt",
 				Size: 5,
 			},
 		},
-		// New Empty dir
+		// It should not appear in rendered aci
+		{
+			contents: "hello",
+			header: &tar.Header{
+				Name: "rootfs/a/file04.txt",
+				Size: 5,
+			},
+		},
 		{
 			header: &tar.Header{
-				Name:     "rootfs/e",
-				Typeflag: tar.TypeDir,
+				Name:     "rootfs/b/link01.txt",
+				Linkname: "file01.txt",
+				Typeflag: tar.TypeSymlink,
 			},
 		},
 	}
 
-	expectedFiles = []*fileInfo{
-		&fileInfo{path: "manifest", typeflag: tar.TypeReg},
-		&fileInfo{path: "rootfs", typeflag: tar.TypeDir},
-		&fileInfo{path: "rootfs/a", typeflag: tar.TypeDir},
-		&fileInfo{path: "rootfs/b", typeflag: tar.TypeDir},
-		&fileInfo{path: "rootfs/a/file01.txt", typeflag: tar.TypeReg, size: 10},
-		&fileInfo{path: "rootfs/a/file02.txt", typeflag: tar.TypeReg, size: 5},
-		&fileInfo{path: "rootfs/a/file03.txt", typeflag: tar.TypeReg, size: 15},
-		&fileInfo{path: "rootfs/b/link01.txt", typeflag: tar.TypeSymlink},
-		&fileInfo{path: "rootfs/c", typeflag: tar.TypeDir},
-		&fileInfo{path: "rootfs/d", typeflag: tar.TypeDir},
-		&fileInfo{path: "rootfs/d/file05.txt", typeflag: tar.TypeReg, size: 5},
-		&fileInfo{path: "rootfs/e", typeflag: tar.TypeDir},
-	}
-
-	hash5, err := newTestAci(entries, ds)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	err = checkRenderImage(hash5, expectedFiles, ds)
+	hash1, err := newTestAci(entries, ds)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Test an image with a pathwhitelist and 2 deps (first without pathWhiteList and the second with pathWhiteList)
-	// "/c/" is en empty dir to keep
-	imj = []byte(`
+	imj = `
 		{
 		    "acKind": "ImageManifest",
 		    "acVersion": "0.1.1",
-		    "name": "example.com/test06",
-		    "pathWhitelist" : [ "/a/file01.txt", "/a/file02.txt", "/a/file03.txt", "/b/link01.txt", "/c/", "/d/file05.txt", "/e/" ]
+		    "name": "example.com/test02",
+		    "pathWhitelist" : [ "/a/file01.txt", "/a/file02.txt", "/b/file01.txt" ]
 		}
-	`)
-	im.UnmarshalJSON([]byte(imj))
+	`
 
-	h1, _ = types.NewHash(hash1)
-	h2, _ = types.NewHash(hash2)
-	im.Dependencies = types.Dependencies{
+	entries = []*testTarEntry{
+		{
+			contents: imj,
+			header: &tar.Header{
+				Name: "manifest",
+				Size: int64(len(imj)),
+			},
+		},
+		// It should be overriden by the one provided by the upper image
+		{
+			contents: "hellohello",
+			header: &tar.Header{
+				Name: "rootfs/a/file01.txt",
+				Size: 10,
+			},
+		},
+		{
+			contents: "hellohello",
+			header: &tar.Header{
+				Name: "rootfs/a/file02.txt",
+				Size: 10,
+			},
+		},
+		{
+			contents: "hello",
+			header: &tar.Header{
+				Name: "rootfs/b/file01.txt",
+				Size: 5,
+			},
+		},
+	}
+
+	hash2, err := newTestAci(entries, ds)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	imj = `
+		{
+		    "acKind": "ImageManifest",
+		    "acVersion": "0.1.1",
+		    "name": "example.com/test03",
+		    "pathWhitelist" : [ "/a/file01.txt", "/a/file02.txt", "/a/file03.txt", "/b/link01.txt", "/b/file01.txt", "/b/file02.txt", "/c/file01.txt" ]
+		}
+	`
+
+	h1, _ := types.NewHash(hash1)
+	h2, _ := types.NewHash(hash2)
+	imj, err = addDependencies(imj,
 		types.Dependency{
 			Name: "example.com/test01",
 			Hash: *h1},
 		types.Dependency{
 			Name: "example.com/test02",
 			Hash: *h2},
-	}
-	imj, err = im.MarshalJSON()
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	)
 
 	entries = []*testTarEntry{
 		{
-			contents: string(imj),
+			contents: imj,
 			header: &tar.Header{
 				Name: "manifest",
 				Size: int64(len(imj)),
 			},
 		},
-		// Updated file
+		// Overridden
 		{
-			contents: "hellohello",
+			contents: "hellohellohello",
 			header: &tar.Header{
 				Name: "rootfs/a/file01.txt",
-				Size: 10,
+				Size: 15,
 			},
 		},
-		// rootfs/a/file02.txt unchanged
-		{
-			header: &tar.Header{
-				Name:     "rootfs/b/link01.txt",
-				Linkname: "file01.txt",
-				Typeflag: tar.TypeSymlink,
-			},
-		},
-		// New file
 		{
 			contents: "hello",
 			header: &tar.Header{
-				Name: "rootfs/d/file05.txt",
+				Name: "rootfs/b/file02.txt",
 				Size: 5,
 			},
 		},
-		// New Empty dir
 		{
+			contents: "hello",
 			header: &tar.Header{
-				Name:     "rootfs/e",
-				Typeflag: tar.TypeDir,
+				Name: "rootfs/c/file01.txt",
+				Size: 5,
 			},
 		},
 	}
 
-	expectedFiles = []*fileInfo{
+	hash3, err := newTestAci(entries, ds)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	expectedFiles := []*fileInfo{
 		&fileInfo{path: "manifest", typeflag: tar.TypeReg},
 		&fileInfo{path: "rootfs", typeflag: tar.TypeDir},
 		&fileInfo{path: "rootfs/a", typeflag: tar.TypeDir},
-		&fileInfo{path: "rootfs/b", typeflag: tar.TypeDir},
-		&fileInfo{path: "rootfs/a/file01.txt", typeflag: tar.TypeReg, size: 10},
-		&fileInfo{path: "rootfs/a/file02.txt", typeflag: tar.TypeReg, size: 5},
-		// rootfs/a/file03.txt should be the one from the first dep. The second dep doesn't have it in the pathWhitelist but should be removed as they are on the same level.
+		&fileInfo{path: "rootfs/a/file01.txt", typeflag: tar.TypeReg, size: 15},
+		&fileInfo{path: "rootfs/a/file02.txt", typeflag: tar.TypeReg, size: 10},
 		&fileInfo{path: "rootfs/a/file03.txt", typeflag: tar.TypeReg, size: 5},
+		&fileInfo{path: "rootfs/b", typeflag: tar.TypeDir},
 		&fileInfo{path: "rootfs/b/link01.txt", typeflag: tar.TypeSymlink},
+		&fileInfo{path: "rootfs/b/file01.txt", typeflag: tar.TypeReg, size: 5},
+		&fileInfo{path: "rootfs/b/file02.txt", typeflag: tar.TypeReg, size: 5},
 		&fileInfo{path: "rootfs/c", typeflag: tar.TypeDir},
-		&fileInfo{path: "rootfs/d", typeflag: tar.TypeDir},
-		&fileInfo{path: "rootfs/d/file05.txt", typeflag: tar.TypeReg, size: 5},
-		&fileInfo{path: "rootfs/e", typeflag: tar.TypeDir},
+		&fileInfo{path: "rootfs/c/file01.txt", typeflag: tar.TypeReg, size: 5},
 	}
 
-	hash6, err := newTestAci(entries, ds)
+	err = checkRenderImage(hash3, expectedFiles, ds)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	err = checkRenderImage(hash6, expectedFiles, ds)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
 }
 
 func checkRenderImage(hash string, expectedFiles []*fileInfo, ds *cas.Store) error {
@@ -622,11 +1333,11 @@ func checkExpectedFiles(dir string, expectedFiles map[string]*fileInfo) error {
 		}
 		switch {
 		case fm.IsRegular():
-			files[relpath] = &fileInfo{path: relpath, typeflag: tar.TypeReg, size: info.Size()}
+			files[relpath] = &fileInfo{path: relpath, typeflag: tar.TypeReg, size: info.Size(), mode: info.Mode().Perm()}
 		case info.IsDir():
-			files[relpath] = &fileInfo{path: relpath, typeflag: tar.TypeDir}
+			files[relpath] = &fileInfo{path: relpath, typeflag: tar.TypeDir, mode: info.Mode().Perm()}
 		case fm&os.ModeSymlink != 0:
-			files[relpath] = &fileInfo{path: relpath, typeflag: tar.TypeSymlink}
+			files[relpath] = &fileInfo{path: relpath, typeflag: tar.TypeSymlink, mode: info.Mode()}
 		default:
 			return fmt.Errorf("not handled file mode %v", fm)
 		}
@@ -635,6 +1346,17 @@ func checkExpectedFiles(dir string, expectedFiles map[string]*fileInfo) error {
 	})
 	if err != nil {
 		return err
+	}
+
+	// Set defaults for not specified expected file mode
+	for _, ef := range expectedFiles {
+		if ef.mode == 0 {
+			if ef.typeflag == tar.TypeDir {
+				ef.mode = 0755
+			} else {
+				ef.mode = 0644
+			}
+		}
 	}
 
 	for _, ef := range expectedFiles {
@@ -657,6 +1379,10 @@ func checkExpectedFiles(dir string, expectedFiles map[string]*fileInfo) error {
 			if ef.size != file.size {
 				return fmt.Errorf("file \"%s\": size differs: found %d, wanted: %d", file.path, file.size, ef.size)
 			}
+		}
+		// Check modes but ignore symlinks
+		if ef.mode != file.mode && ef.typeflag != tar.TypeSymlink {
+			return fmt.Errorf("file \"%s\": mode differs: found %#o, wanted: %#o", file.path, file.mode, ef.mode)
 		}
 
 	}
