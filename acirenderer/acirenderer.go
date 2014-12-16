@@ -30,7 +30,7 @@ type Image struct {
 type Images []Image
 
 // Returns the ImageManifest and the Hash of the requested dependency
-// This is a fake function that should be replaces by a real image discovery
+// This is a fake function that should be replaced by a real image discovery
 // and dependency matching
 func fakeDepDiscovery(dep types.Dependency, ds *cas.Store) (*schema.ImageManifest, *types.Hash, error) {
 	hash := dep.Hash
@@ -131,7 +131,7 @@ func renderImage(img Image, dir string, ds *cas.Store, prevlevel uint16) error {
 				return nil
 			}
 
-			relpath, err := filepath.Rel(rootfs, path)
+			relpath, err := filepath.Rel(dir, path)
 			if err != nil {
 				return err
 			}
@@ -147,18 +147,18 @@ func renderImage(img Image, dir string, ds *cas.Store, prevlevel uint16) error {
 			return fmt.Errorf("build: Error walking rootfs: %v", err)
 		}
 
-		removeEmptyDirs(rootfs, rootfs, m)
+		removeEmptyDirs(dir, rootfs, m)
 	}
 	return nil
 }
 
-func removeEmptyDirs(rootfs string, dir string, pathWhitelistMap map[string]uint8) error {
+func removeEmptyDirs(base string, dir string, pathWhitelistMap map[string]uint8) error {
 	dirs, err := getDirectories(dir)
 	if err != nil {
 		return err
 	}
 	for _, dir := range dirs {
-		removeEmptyDirs(rootfs, dir, pathWhitelistMap)
+		removeEmptyDirs(base, dir, pathWhitelistMap)
 	}
 	f, err := os.Open(dir)
 	if err != nil {
@@ -170,7 +170,7 @@ func removeEmptyDirs(rootfs string, dir string, pathWhitelistMap map[string]uint
 		return err
 	}
 	if len(names) == 0 {
-		relpath, err := filepath.Rel(rootfs, dir)
+		relpath, err := filepath.Rel(base, dir)
 		if err != nil {
 			return err
 		}
@@ -209,9 +209,9 @@ func getDirectories(dir string) ([]string, error) {
 // Also change path to be relative to "/" so it can easyly used without the
 // calling function calling filepath.Join("/", ...)
 func pwlToMap(pwl []string) map[string]uint8 {
-	m := make(map[string]uint8, len(pwl))
+	m := make(ptar.PathWhitelistMap, len(pwl))
 	for _, v := range pwl {
-		relpath, _ := filepath.Rel("/", v)
+		relpath := filepath.Join("rootfs/", v)
 		m[relpath] = 1
 	}
 	return m

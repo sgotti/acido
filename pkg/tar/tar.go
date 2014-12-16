@@ -13,10 +13,14 @@ import (
 	"github.com/docker/docker/pkg/system"
 )
 
+const DEFAULT_DIR_MODE os.FileMode = 0755
+
 type insecureLinkError error
 
+type PathWhitelistMap map[string]uint8
+
 // ExtractTar extracts a tarball (from a tar.Reader) into the given directory
-func ExtractTar(tr *tar.Reader, dir string, overwrite bool, pathWhitelist map[string]uint8) error {
+func ExtractTar(tr *tar.Reader, dir string, overwrite bool, pwl PathWhitelistMap) error {
 	um := syscall.Umask(0)
 	defer syscall.Umask(um)
 
@@ -28,17 +32,10 @@ Tar:
 		case io.EOF:
 			break Tar
 		case nil:
-			if len(pathWhitelist) > 0 {
-				p := filepath.Clean(hdr.Name)
-				// Check only files inside rootfs
-				if strings.HasPrefix(p, "rootfs/") {
-					relpath, err := filepath.Rel("rootfs/", hdr.Name)
-					if err != nil {
-						return err
-					}
-					if _, ok := pathWhitelist[relpath]; !ok {
-						continue
-					}
+			if pwl != nil && len(pwl) > 0 {
+				relpath := filepath.Clean(hdr.Name)
+				if _, ok := pwl[relpath]; !ok {
+					continue
 				}
 			}
 			err = ExtractEntry(tr, hdr, dir, overwrite)
@@ -90,39 +87,40 @@ func ExtractFile(tr *tar.Reader, file string) ([]byte, error) {
 	}
 }
 
+// Extract the file provided by hdr
 func ExtractEntry(tr *tar.Reader, hdr *tar.Header, dir string, overwrite bool) error {
 	p := filepath.Join(dir, hdr.Name)
 	fi := hdr.FileInfo()
 	typ := hdr.Typeflag
 
 	if overwrite {
-		// If file exists remove it
+		// If file already exists remove it
 		info, err := os.Lstat(p)
 		if err == nil {
-			//and if it's a dir remove it and all his childs
+			// If the old file is a dir and the new one isn't a dir
+			// remove it and all his childs
 			if info.IsDir() && typ != tar.TypeDir {
 				err := os.RemoveAll(p)
 				if err != nil {
 					return err
 				}
 			}
+			// If the old file isn't a dir and the new one isn't a dir
+			// remove it
 			if !info.IsDir() && typ != tar.TypeDir {
 				err := os.Remove(p)
 				if err != nil {
 					return err
 				}
 			}
-		}
-	}
-	// Create parent dir if it doesn't exists
-	pdir := filepath.Dir(p)
-	_, err := os.Lstat(pdir)
-	if err != nil {
-		if err := os.MkdirAll(pdir, 0755); err != nil {
-			return err
+			// if both are dirs do nothing
 		}
 	}
 
+	// Create parent dir if it doesn't exists
+	if err := os.MkdirAll(filepath.Dir(p), DEFAULT_DIR_MODE); err != nil {
+		return err
+	}
 	switch {
 	case typ == tar.TypeReg || typ == tar.TypeRegA:
 
