@@ -38,7 +38,7 @@ Tar:
 					continue
 				}
 			}
-			err = ExtractEntry(tr, hdr, dir, overwrite)
+			err = ExtractFile(tr, hdr, dir, overwrite)
 			if err != nil {
 				return fmt.Errorf("error extracting tarball: %v", err)
 			}
@@ -63,7 +63,7 @@ Tar:
 	return nil
 }
 
-func ExtractFile(tr *tar.Reader, file string) ([]byte, error) {
+func ExtractTarFileToBuf(tr *tar.Reader, file string) ([]byte, error) {
 	for {
 		hdr, err := tr.Next()
 		switch err {
@@ -88,7 +88,7 @@ func ExtractFile(tr *tar.Reader, file string) ([]byte, error) {
 }
 
 // Extract the file provided by hdr
-func ExtractEntry(tr *tar.Reader, hdr *tar.Header, dir string, overwrite bool) error {
+func ExtractFile(tr *tar.Reader, hdr *tar.Header, dir string, overwrite bool) error {
 	p := filepath.Join(dir, hdr.Name)
 	fi := hdr.FileInfo()
 	typ := hdr.Typeflag
