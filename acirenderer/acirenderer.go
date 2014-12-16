@@ -15,110 +15,129 @@ import (
 	"github.com/coreos/rocket/cas"
 )
 
-// TODO by now the dependency are searched in the store by hash. Waiting for a fetch mechanism: see https://github.com/appc/spec/issues/16
+// And Image contains the ImageManifest, the Hash and the Level in the dependency tree of this image
 type Image struct {
 	im    *schema.ImageManifest
 	Hash  *types.Hash
 	Level uint16
 }
 
-func CreateDepList(hash *types.Hash, ds *cas.Store) (*list.List, error) {
+// An ordered slice made of Image. Represent a flatten dependency tree.
+// The upper Image should be the first with a level of 0.
+// For example if A is the upper images and has two deps (in order B and C). And C has one dep (D):
+// The list (reperting the name and excluding im and Hash) should be:
+// [{A, Level: 0}, {C, Level:1}, {D, Level: 2}, {B, Level: 1}]
+type Images []Image
+
+// Returns an ordered list of Image type to be rendered
+func CreateDepList(hash *types.Hash, ds *cas.Store) (Images, error) {
 	im, err := util.GetImageManifest(hash, ds)
 	if err != nil {
 		return nil, err
 	}
-	images := list.New()
+	imgsl := list.New()
 	img := Image{im: im, Hash: hash, Level: 0}
-	images.PushFront(img)
+	imgsl.PushFront(img)
 
-	for el := images.Front(); el != nil; el = el.Next() {
+	// Create a flatten dependency tree. Use a LinkedList to be able to insert elements in the list while working on it.
+	for el := imgsl.Front(); el != nil; el = el.Next() {
 		img := el.Value.(Image)
 		dependencies := img.im.Dependencies
 		for _, d := range dependencies {
 			hash := d.Hash
+			// TODO by now the dependency needs to provide its hash. Waiting for a discovery mechanism to get the hash by the provided dependency infos: see https://github.com/appc/spec/issues/16
+			if hash.Empty() {
+				return nil, fmt.Errorf("TODO. Needed dependency hash\n")
+			}
 			im, err := util.GetImageManifest(&hash, ds)
 			if err != nil {
 				return nil, err
 			}
 			depimg := Image{im: im, Hash: &hash, Level: img.Level + 1}
-			images.InsertAfter(depimg, el)
+			imgsl.InsertAfter(depimg, el)
 		}
 	}
 
-	return images, nil
+	imgs := Images{}
+	for el := imgsl.Front(); el != nil; el = el.Next() {
+		imgs = append(imgs, el.Value.(Image))
+	}
+	return imgs, nil
 }
 
+// Given an image hash already available in the store (ds), build its dependency list and render it inside dir
 func RenderImage(hashStr string, dir string, ds *cas.Store) error {
 	hash, err := types.NewHash(hashStr)
 	if err != nil {
 		return err
 	}
-	images, err := CreateDepList(hash, ds)
+	imgs, err := CreateDepList(hash, ds)
 	if err != nil {
 		return err
 	}
 
-	err = renderImage(images, dir, ds)
-	if err != nil {
-		return err
+	if len(imgs) == 0 {
+		return fmt.Errorf("Image list empty")
 	}
 
-	return nil
-}
+	// This implementation needs to start from the end of the tree.
+	end := len(imgs) - 1
+	prevlevel := imgs[end].Level
+	for i := end; i >= 0; i-- {
+		img := imgs[i]
 
-func renderImage(images *list.List, dir string, ds *cas.Store) error {
-	img := images.Back().Value.(Image)
-	prevlevel := img.Level
-
-	for el := images.Back(); el != nil; el = el.Prev() {
-		img := el.Value.(Image)
-		rs, err := ds.ReadStream(img.Hash.String())
+		err = renderImage(img, dir, ds, prevlevel)
 		if err != nil {
 			return err
 		}
-		// TODO by now all the streams will be closed at the end of the function. Close them at the end of every loop?
-		defer rs.Close()
-		if err := ptar.ExtractTar(tar.NewReader(rs), dir, true, sliceToMap(img.im.PathWhitelist)); err != nil {
-			return fmt.Errorf("error extracting ACI: %v", err)
-		}
-		// If the image is an a previous level then apply PathWhiteList if not empty
 		if img.Level < prevlevel {
 			prevlevel = img.Level
+		}
+	}
+	return nil
+}
 
-			if len(img.im.PathWhitelist) == 0 {
-				continue
+func renderImage(img Image, dir string, ds *cas.Store, prevlevel uint16) error {
+	rs, err := ds.ReadStream(img.Hash.String())
+	if err != nil {
+		return err
+	}
+	defer rs.Close()
+	if err := ptar.ExtractTar(tar.NewReader(rs), dir, true, pwlToMap(img.im.PathWhitelist)); err != nil {
+		return fmt.Errorf("error extracting ACI: %v", err)
+	}
+	// If the image is an a previous level remove files not in
+	// PathWhitelist (if PathWhitelist isn't empty)
+	// Directories are handled after file removal and all empty directories
+	// not in the pathWhiteList will be removed
+	if img.Level < prevlevel {
+		if len(img.im.PathWhitelist) == 0 {
+			return nil
+		}
+		m := pwlToMap(img.im.PathWhitelist)
+		rootfs := filepath.Join(dir, "rootfs/")
+		err = filepath.Walk(rootfs, func(path string, info os.FileInfo, err error) error {
+			if info.IsDir() {
+				return nil
 			}
-			m := sliceToMap(img.im.PathWhitelist)
-			rootfs := filepath.Join(dir, "rootfs/")
-			err = filepath.Walk(rootfs, func(path string, info os.FileInfo, err error) error {
 
-				relpath, err := filepath.Rel(rootfs, path)
+			relpath, err := filepath.Rel(rootfs, path)
+			if err != nil {
+				return err
+			}
+			if _, ok := m[relpath]; !ok {
+				err := os.Remove(path)
 				if err != nil {
 					return err
 				}
-				// Ignore directories as if a file inside it is
-				// in the pathWhiteList but its parent
-				// directories are not in the pathWhiteList we
-				// assume that they should be created.
-				// Later we will remove empty directories not in the pathWhiteList
-				if info.IsDir() {
-					return nil
-				}
-				if _, ok := m[relpath]; !ok {
-					err := os.Remove(path)
-					if err != nil {
-						return err
-					}
-				}
-				return nil
-			})
-
-			if err != nil {
-				return fmt.Errorf("build: Error walking rootfs: %v", err)
 			}
-
-			removeEmptyDirs(rootfs, rootfs, m)
+			return nil
+		})
+		if err != nil {
+			return fmt.Errorf("build: Error walking rootfs: %v", err)
 		}
+
+		removeEmptyDirs(rootfs, rootfs, m)
 	}
 	return nil
 }
@@ -176,9 +195,12 @@ func getDirectories(dir string) ([]string, error) {
 	return dirs, nil
 }
 
-func sliceToMap(slice []string) map[string]uint8 {
-	m := make(map[string]uint8, len(slice))
-	for _, v := range slice {
+// Convert pathWhiteList slice to a map for faster search
+// Also change path to be relative to "/" so it can easyly used without the
+// calling function calling filepath.Join("/", ...)
+func pwlToMap(pwl []string) map[string]uint8 {
+	m := make(map[string]uint8, len(pwl))
+	for _, v := range pwl {
 		relpath, _ := filepath.Rel("/", v)
 		m[relpath] = 1
 	}
