@@ -29,6 +29,21 @@ type Image struct {
 // [{A, Level: 0}, {C, Level:1}, {D, Level: 2}, {B, Level: 1}]
 type Images []Image
 
+// Returns the ImageManifest and the Hash of the requested dependency
+// This is a fake function that should be replaces by a real image discovery
+// and dependency matching
+func fakeDepDiscovery(dep types.Dependency, ds *cas.Store) (*schema.ImageManifest, *types.Hash, error) {
+	hash := dep.Hash
+	if hash.Empty() {
+		return nil, nil, fmt.Errorf("TODO. Needed dependency hash\n")
+	}
+	im, err := util.GetImageManifest(&hash, ds)
+	if err != nil {
+		return nil, nil, err
+	}
+	return im, &hash, nil
+}
+
 // Returns an ordered list of Image type to be rendered
 func CreateDepList(hash *types.Hash, ds *cas.Store) (Images, error) {
 	im, err := util.GetImageManifest(hash, ds)
@@ -44,16 +59,11 @@ func CreateDepList(hash *types.Hash, ds *cas.Store) (Images, error) {
 		img := el.Value.(Image)
 		dependencies := img.im.Dependencies
 		for _, d := range dependencies {
-			hash := d.Hash
-			// TODO by now the dependency needs to provide its hash. Waiting for a discovery mechanism to get the hash by the provided dependency infos: see https://github.com/appc/spec/issues/16
-			if hash.Empty() {
-				return nil, fmt.Errorf("TODO. Needed dependency hash\n")
-			}
-			im, err := util.GetImageManifest(&hash, ds)
+			im, hash, err := fakeDepDiscovery(d, ds)
 			if err != nil {
 				return nil, err
 			}
-			depimg := Image{im: im, Hash: &hash, Level: img.Level + 1}
+			depimg := Image{im: im, Hash: hash, Level: img.Level + 1}
 			imgsl.InsertAfter(depimg, el)
 		}
 	}
