@@ -56,7 +56,6 @@ func startBuild(args []string) error {
 		ACKind:    "ImageManifest",
 		ACVersion: *version,
 		Name:      "example.com/changeme",
-		App:       types.App{Exec: []string{"/bin/true"}},
 		Dependencies: types.Dependencies{
 			types.Dependency{
 				Name: baseim.Name,

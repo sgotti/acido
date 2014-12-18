@@ -52,16 +52,9 @@ $ cat /tmp/fedora21/manifest
             "name": "os",
             "val": "linux"
         }
-    ],
-    "app": {
-        "exec": [
-            "/bin/true"
-        ]
-    }
+    ]
 }
 ```
-
-Note: The app entry is a workaround until validator is fixed to accept an undefined app.
 
 ### Build the image.
 
