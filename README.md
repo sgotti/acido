@@ -42,15 +42,15 @@ $ cat /tmp/fedora21/manifest
     "labels": [
         {
             "name": "version",
-            "val": "21.0.0"
+            "value": "21.0.0"
         },
         {
             "name": "arch",
-            "val": "amd64"
+            "value": "amd64"
         },
         {
             "name": "os",
-            "val": "linux"
+            "value": "linux"
         }
     ]
 }
