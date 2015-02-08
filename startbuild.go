@@ -39,7 +39,7 @@ func startBuild(args []string) error {
 	if err != nil {
 		return err
 	}
-	log.V(1).Infof("tmpdir: %s", tmpdir)
+	log.Debugf("tmpdir: %s", tmpdir)
 	baseim, err := util.GetImageManifest(baseHash, ds)
 	if err != nil {
 		return err

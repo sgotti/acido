@@ -100,7 +100,7 @@ func build(args []string) error {
 	if err != nil {
 		return err
 	}
-	log.V(1).Infof("tmpdir: %s", tmpdir)
+	log.Debugf("tmpdir: %s", tmpdir)
 	os.Mkdir(filepath.Join(tmpdir, "/rootfs"), 0755)
 
 	im, err := util.LoadImageManifest(filepath.Join(imagefs, "manifest"))
@@ -110,7 +110,7 @@ func build(args []string) error {
 	dependencies := im.Dependencies
 	for _, d := range dependencies {
 		//if _, ok := seenImages[d.Hash]
-		log.V(1).Infof("Dependency Hash: %s\n", d.Hash)
+		log.Debugf("Dependency Hash: %s\n", d.Hash)
 		if d.Hash.Val != "" {
 			err = acirenderer.RenderImage(d.Hash.String(), tmpdir, ds)
 			if err != nil {

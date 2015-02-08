@@ -82,7 +82,7 @@ func main() {
 	}
 
 	if globalFlags.Debug {
-		log.SetVerbosity(1)
+		log.EnableDebug()
 	}
 
 	os.Exit(cmd.Run(cmd.Flags.Args()))

@@ -32,7 +32,7 @@ func runExtract(args []string) (exit int) {
 		log.Errorf("error: %v", err)
 		return 1
 	}
-	log.V(1).Infof("tmpdir: %s", tmpdir)
+	log.Debugf("tmpdir: %s", tmpdir)
 	err = acirenderer.RenderImage(hash, tmpdir, ds)
 	if err != nil {
 		log.Errorf("error: %v", err)

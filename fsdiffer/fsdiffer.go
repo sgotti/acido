@@ -61,7 +61,7 @@ func FSDiff(A string, B string) ([]FSChange, error) {
 		} else {
 			// tar time is with the second precision. TODO now add 1 second to the modtime.
 			if infoA.Size() != infoB.Size() || infoA.ModTime().Add(time.Second).Before(infoB.ModTime()) {
-				log.V(1).Infof("relpath: %s, infoA.Size(): %d, infoB.Size(): %d, infoA.ModTime(): %s, infoB.ModTime():%s\n", relpath, infoA.Size(), infoB.Size(), infoA.ModTime(), infoB.ModTime())
+				log.Debugf("relpath: %s, infoA.Size(): %d, infoB.Size(): %d, infoA.ModTime(): %s, infoB.ModTime():%s", relpath, infoA.Size(), infoB.Size(), infoA.ModTime(), infoB.ModTime())
 				changes = append(changes, FSChange{Path: relpath, ChangeType: Modified})
 			}
 		}
