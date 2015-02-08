@@ -33,15 +33,15 @@ type Images []Image
 // This is a fake function that should be replaced by a real image discovery
 // and dependency matching
 func fakeDepDiscovery(dep types.Dependency, ds *cas.Store) (*schema.ImageManifest, *types.Hash, error) {
-	hash := dep.Hash
-	if hash.Empty() {
+	imageID := dep.ImageID
+	if imageID.Empty() {
 		return nil, nil, fmt.Errorf("TODO. Needed dependency hash\n")
 	}
-	im, err := util.GetImageManifest(&hash, ds)
+	im, err := util.GetImageManifest(imageID, ds)
 	if err != nil {
 		return nil, nil, err
 	}
-	return im, &hash, nil
+	return im, imageID, nil
 }
 
 // Returns an ordered list of Image type to be rendered

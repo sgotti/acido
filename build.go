@@ -80,8 +80,7 @@ func builder(root string, files []string, aw aci.ArchiveWriter) error {
 			hdr.Size = 0
 			file = nil
 		}
-		aw.AddFile(relpath, hdr, file)
-
+		aw.AddFile(hdr, file)
 	}
 	return nil
 }
@@ -110,9 +109,9 @@ func build(args []string) error {
 	dependencies := im.Dependencies
 	for _, d := range dependencies {
 		//if _, ok := seenImages[d.Hash]
-		log.Debugf("Dependency Hash: %s\n", d.Hash)
-		if d.Hash.Val != "" {
-			err = acirenderer.RenderImage(d.Hash.String(), tmpdir, ds)
+		log.Debugf("Dependency ImageID: %s\n", d.ImageID)
+		if !d.ImageID.Empty() {
+			err = acirenderer.RenderImage(d.ImageID.String(), tmpdir, ds)
 			if err != nil {
 				return err
 			}

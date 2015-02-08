@@ -29,8 +29,8 @@ func init() {
 func startBuild(args []string) error {
 	ds := cas.NewStore(globalFlags.Dir)
 
-	baseHashStr := args[0]
-	baseHash, err := types.NewHash(baseHashStr)
+	baseImageIDStr := args[0]
+	baseImageID, err := types.NewHash(baseImageIDStr)
 	if err != nil {
 		return err
 	}
@@ -40,12 +40,12 @@ func startBuild(args []string) error {
 		return err
 	}
 	log.Debugf("tmpdir: %s", tmpdir)
-	baseim, err := util.GetImageManifest(baseHash, ds)
+	baseim, err := util.GetImageManifest(baseImageID, ds)
 	if err != nil {
 		return err
 	}
 
-	err = acirenderer.RenderImage(baseHashStr, tmpdir, ds)
+	err = acirenderer.RenderImage(baseImageIDStr, tmpdir, ds)
 	if err != nil {
 		return err
 	}
@@ -58,8 +58,8 @@ func startBuild(args []string) error {
 		Name:      "example.com/changeme",
 		Dependencies: types.Dependencies{
 			types.Dependency{
-				Name: baseim.Name,
-				Hash: *baseHash,
+				App:     baseim.Name,
+				ImageID: baseImageID,
 			},
 		},
 	}

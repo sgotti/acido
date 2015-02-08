@@ -32,8 +32,7 @@ func runImport(args []string) (exit int) {
 			log.Errorf("error: %v", err)
 			return 1
 		}
-		tmp := types.NewHashSHA256([]byte(img)).String()
-		key, err := ds.WriteACI(tmp, file)
+		key, err := ds.WriteACI(file)
 		file.Close()
 		if err != nil {
 			log.Errorf("%s: %v", img, err)
