@@ -41,7 +41,7 @@ Create a manifest file for this aci:
 $ cat /tmp/fedora21/manifest
 {
     "acKind": "ImageManifest",
-    "acVersion": "0.1.0",
+    "acVersion": "0.3.0",
     "name": "example.com/fedora",
     "labels": [
         {
