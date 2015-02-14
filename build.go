@@ -1,20 +1,17 @@
 package main
 
 import (
-	"archive/tar"
-	"compress/gzip"
 	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 
-	"github.com/appc/spec/aci"
-	"github.com/appc/spec/pkg/tarheader"
+	"github.com/sgotti/acido/acirenderer"
+	"github.com/sgotti/acido/util"
+
 	"github.com/coreos/fleet/log"
 	"github.com/coreos/rocket/cas"
-	"github.com/sgotti/acido/acirenderer"
-	"github.com/sgotti/acido/fsdiffer"
-	"github.com/sgotti/acido/util"
+	"github.com/sgotti/acibuilder"
 )
 
 var (
@@ -32,57 +29,6 @@ var (
 
 func init() {
 	commands = append(commands, cmdBuild)
-}
-
-func builder(root string, files []string, aw aci.ArchiveWriter) error {
-	// cache of inode -> filepath, used to leverage hard links in the archive
-	inos := map[uint64]string{}
-	for _, path := range files {
-		relpath, err := filepath.Rel(root, path)
-		if err != nil {
-			return err
-		}
-		relpath = filepath.Join("rootfs/", relpath)
-
-		info, err := os.Lstat(path)
-		if err != nil {
-			return err
-		}
-		var file *os.File
-		link := ""
-		switch info.Mode() & os.ModeType {
-		default:
-			file, err = os.Open(path)
-			if err != nil {
-				return err
-			}
-			defer file.Close()
-		case os.ModeSymlink:
-			target, err := os.Readlink(path)
-			if err != nil {
-				return err
-			}
-			link = target
-		}
-
-		hdr, err := tar.FileInfoHeader(info, link)
-		if err != nil {
-			panic(err)
-		}
-		// Because os.FileInfo's Name method returns only the base
-		// name of the file it describes, it may be necessary to
-		// modify the Name field of the returned header to provide the
-		// full path name of the file.
-		hdr.Name = relpath
-		tarheader.Populate(hdr, info, inos)
-		// If the file is a hard link we don't need the contents
-		if hdr.Typeflag == tar.TypeLink {
-			hdr.Size = 0
-			file = nil
-		}
-		aw.AddFile(hdr, file)
-	}
-	return nil
 }
 
 func build(args []string) error {
@@ -107,50 +53,20 @@ func build(args []string) error {
 		return err
 	}
 	dependencies := im.Dependencies
-	for _, d := range dependencies {
-		//if _, ok := seenImages[d.Hash]
-		log.Debugf("Dependency ImageID: %s\n", d.ImageID)
-		if !d.ImageID.Empty() {
-			err = acirenderer.RenderImage(d.ImageID.String(), tmpdir, ds)
-			if err != nil {
-				return err
-			}
-		}
+	switch s := len(dependencies); {
+	case s > 1 || s < 1:
+		return fmt.Errorf("build: exactly one dependency is required")
+
 	}
 
-	A := filepath.Join(tmpdir, "/rootfs")
-	B := filepath.Join(imagefs, "/rootfs")
-	changes, err := fsdiffer.FSDiff(A, B)
-
-	if err != nil {
-		return err
-	}
-
-	// Create a file list with all the Added and Modified files
-	files := []string{}
-	for _, change := range changes {
-		if change.ChangeType == fsdiffer.Added || change.ChangeType == fsdiffer.Modified {
-			files = append(files, filepath.Join(B, change.Path))
-		}
-	}
-
-	pathWhitelist := []string{}
-	err = filepath.Walk(B, func(path string, info os.FileInfo, err error) error {
-		relpath, err := filepath.Rel(B, path)
+	dependency := dependencies[0]
+	log.Debugf("Dependency ImageID: %s\n", dependency.ImageID)
+	if !dependency.ImageID.Empty() {
+		err = acirenderer.RenderImage(dependency.ImageID.String(), tmpdir, ds)
 		if err != nil {
 			return err
 		}
-		pathWhitelist = append(pathWhitelist, filepath.Join("/", relpath))
-		return nil
-	})
-
-	if err != nil {
-		return fmt.Errorf("build: Error walking rootfs: %v", err)
 	}
-
-	//log.Infof("changes: %v\n", changes)
-	//log.Infof("files: %v\n", files)
-	//log.Infof("pathWhitelist: %v\n", pathWhitelist)
 
 	mode := os.O_CREATE | os.O_WRONLY | os.O_TRUNC
 	fh, err := os.OpenFile(out, mode, 0644)
@@ -161,32 +77,20 @@ func build(args []string) error {
 			return fmt.Errorf("build: Unable to open target %s: %v", out, err)
 		}
 	}
-
-	gw := gzip.NewWriter(fh)
-	tr := tar.NewWriter(gw)
-
 	defer func() {
-		tr.Close()
-		gw.Close()
 		fh.Close()
 	}()
 
-	im.PathWhitelist = pathWhitelist
+	ACIBuilder := acibuilder.NewDiffACIBuilder(tmpdir, imagefs)
 
-	aw := aci.NewImageWriter(*im, tr)
-
-	err = builder(B, files, aw)
+	err = ACIBuilder.Build(*im, fh)
 	if err != nil {
 		return err
 	}
 
-	err = aw.Close()
-	if err != nil {
-		return fmt.Errorf("build: Unable to close Fileset image %s: %v", out, err)
-	}
-
 	return nil
 }
+
 func runBuild(args []string) (exit int) {
 	err := build(args)
 	if err != nil {
