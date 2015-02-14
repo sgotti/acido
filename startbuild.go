@@ -55,11 +55,13 @@ func startBuild(args []string) error {
 	im := schema.ImageManifest{
 		ACKind:    "ImageManifest",
 		ACVersion: *version,
-		Name:      "example.com/changeme",
+		Name:      baseim.Name,
+		Labels:    baseim.Labels,
 		Dependencies: types.Dependencies{
 			types.Dependency{
 				App:     baseim.Name,
 				ImageID: baseImageID,
+				Labels:  baseim.Labels,
 			},
 		},
 	}
