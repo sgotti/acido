@@ -51,10 +51,10 @@ func startBuild(args []string) error {
 	}
 	log.Infof("Image extracted to %s", tmpdir)
 
-	version, _ := types.NewSemVer("0.1.0")
+	version := schema.AppContainerVersion
 	im := schema.ImageManifest{
 		ACKind:    "ImageManifest",
-		ACVersion: *version,
+		ACVersion: version,
 		Name:      baseim.Name,
 		Labels:    baseim.Labels,
 		Dependencies: types.Dependencies{
