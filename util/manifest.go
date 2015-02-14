@@ -19,7 +19,7 @@ func GetImageManifest(hash *types.Hash, ds *cas.Store) (*schema.ImageManifest, e
 		return nil, fmt.Errorf("error extracting ImageManifest: %v", err)
 	}
 
-	imb, err := ptar.ExtractTarFileToBuf(tar.NewReader(rs), "manifest")
+	imb, err := ptar.ExtractFileFromTar(tar.NewReader(rs), "manifest")
 	if err != nil {
 		return nil, fmt.Errorf("error extracting ImageManifest: %v", err)
 	}
