@@ -17,8 +17,8 @@ By now the first 2 point are implemented and you can create and manage new image
 By now with the `extract` and `startbuild` commands the image is fetched from the Rocket CAS store by ImageID. In future there will be a way to get an image also by its name and labels (coreos/rocket#395).
 
 Note: By now rocket is waiting for PR to implements various features:
- * An acirenderer that is able to build an image with dependencies (coreos/rocket#464, coreos/rocket#465). So, as today, generated ACIs that have dependencies cannot be used.
- * A way to get images from the cas by an ImageID or by a app name and optional labels (coreos/rocket#392, coreos/rocket#393, coreos/rocket#394, coreos/rocket#395, coreos/rocket#322). 
+* An aci renderer that is able to build an image with dependencies (coreos/rocket#464, coreos/rocket#465, coreos/rocket#533). So, as today, generated ACIs that have dependencies cannot be used.
+* A way to get images from the cas by an ImageID or by a app name and optional labels (coreos/rocket#392, coreos/rocket#393, coreos/rocket#394, coreos/rocket#395, coreos/rocket#322). 
 
 As of now, some parts of this program have been proposed for coreos/rocket and appc/spec (tar package new features and fixes, acirenderer etc...), other are going to be proposed (ACIBuilder, FSDiffer etc...)
 

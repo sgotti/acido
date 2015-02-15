@@ -4,12 +4,12 @@ import (
 	"io/ioutil"
 	"path/filepath"
 
+	"github.com/sgotti/acido/cas"
+	"github.com/sgotti/acido/pkg/aci"
+
 	"github.com/appc/spec/schema"
 	"github.com/appc/spec/schema/types"
 	"github.com/coreos/fleet/log"
-	"github.com/coreos/rocket/cas"
-	"github.com/sgotti/acido/acirenderer"
-	"github.com/sgotti/acido/util"
 )
 
 var (
@@ -40,12 +40,12 @@ func startBuild(args []string) error {
 		return err
 	}
 	log.Debugf("tmpdir: %s", tmpdir)
-	baseim, err := util.GetImageManifest(baseImageID, ds)
+	baseim, err := ds.GetImageManifest(baseImageIDStr)
 	if err != nil {
 		return err
 	}
 
-	err = acirenderer.RenderImage(baseImageIDStr, tmpdir, ds)
+	err = aci.RenderACIWithImageID(*baseImageID, tmpdir, ds)
 	if err != nil {
 		return err
 	}

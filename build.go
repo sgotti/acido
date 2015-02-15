@@ -6,11 +6,11 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/sgotti/acido/acirenderer"
+	"github.com/sgotti/acido/cas"
+	"github.com/sgotti/acido/pkg/aci"
 	"github.com/sgotti/acido/util"
 
 	"github.com/coreos/fleet/log"
-	"github.com/coreos/rocket/cas"
 	"github.com/sgotti/acibuilder"
 )
 
@@ -62,10 +62,11 @@ func build(args []string) error {
 	dependency := dependencies[0]
 	log.Debugf("Dependency ImageID: %s\n", dependency.ImageID)
 	if !dependency.ImageID.Empty() {
-		err = acirenderer.RenderImage(dependency.ImageID.String(), tmpdir, ds)
+		err := aci.RenderACIWithImageID(*dependency.ImageID, tmpdir, ds)
 		if err != nil {
 			return err
 		}
+
 	}
 
 	mode := os.O_CREATE | os.O_WRONLY | os.O_TRUNC
