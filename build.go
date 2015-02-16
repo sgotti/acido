@@ -35,7 +35,7 @@ func init() {
 
 func build(args []string) error {
 	if len(args) != 2 {
-		return fmt.Errorf("build: Must provide imagefs and output file")
+		return fmt.Errorf("must provide imagefs and output file")
 	}
 
 	ds := cas.NewStore(globalFlags.Dir)
@@ -57,8 +57,7 @@ func build(args []string) error {
 	dependencies := im.Dependencies
 	switch s := len(dependencies); {
 	case s > 1 || s < 1:
-		return fmt.Errorf("build: exactly one dependency is required")
-
+		return fmt.Errorf("exactly one dependency is required")
 	}
 
 	dependency := dependencies[0]
@@ -80,7 +79,7 @@ func build(args []string) error {
 	fh, err := os.OpenFile(out, mode, 0644)
 	if err != nil {
 		if os.IsExist(err) {
-			return fmt.Errorf("build: Target file exists (try --overwrite)")
+			return fmt.Errorf("target file exists (try --overwrite)")
 		} else {
 			return fmt.Errorf("build: Unable to open target %s: %v", out, err)
 		}

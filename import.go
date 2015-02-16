@@ -35,7 +35,7 @@ func runImport(args []string) (exit int) {
 		key, err := ds.WriteACI(file)
 		file.Close()
 		if err != nil {
-			log.Errorf("%s: %v", img, err)
+			log.Errorf("error importing %s: %v", img, err)
 			return 1
 		}
 		h, err := types.NewHash(key)
