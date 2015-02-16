@@ -17,17 +17,19 @@ import (
 var (
 	buildImageManifest string
 	buildBaseImageHash string
+	buildOverwrite     bool
 
 	cmdBuild = &Command{
 		Name:        "build",
 		Summary:     "Build a previously prepared image with only the differences from a base and the new image",
-		Usage:       "IMAGEFS OUTPUTFILE",
+		Usage:       "[--overwrite] IMAGEFS OUTPUTFILE",
 		Description: `IMAGEFS is the directory containing the image data.`,
 		Run:         runBuild,
 	}
 )
 
 func init() {
+	cmdBuild.Flags.BoolVar(&buildOverwrite, "overwrite", false, "Overwrite target file if it already exists")
 	commands = append(commands, cmdBuild)
 }
 
@@ -69,7 +71,12 @@ func build(args []string) error {
 
 	}
 
-	mode := os.O_CREATE | os.O_WRONLY | os.O_TRUNC
+	mode := os.O_CREATE | os.O_WRONLY
+	if buildOverwrite {
+		mode |= os.O_TRUNC
+	} else {
+		mode |= os.O_EXCL
+	}
 	fh, err := os.OpenFile(out, mode, 0644)
 	if err != nil {
 		if os.IsExist(err) {
