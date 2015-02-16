@@ -55,19 +55,23 @@ func build(args []string) error {
 		return err
 	}
 	dependencies := im.Dependencies
+	var aciBuilder acibuilder.ACIBuilder
 	switch s := len(dependencies); {
-	case s > 1 || s < 1:
+	case s > 1:
 		return fmt.Errorf("exactly one dependency is required")
-	}
+	case s == 1:
+		dependency := dependencies[0]
+		log.Debugf("Dependency ImageID: %s\n", dependency.ImageID)
+		if !dependency.ImageID.Empty() {
+			err := aci.RenderACIWithImageID(*dependency.ImageID, tmpdir, ds)
+			if err != nil {
+				return err
+			}
 
-	dependency := dependencies[0]
-	log.Debugf("Dependency ImageID: %s\n", dependency.ImageID)
-	if !dependency.ImageID.Empty() {
-		err := aci.RenderACIWithImageID(*dependency.ImageID, tmpdir, ds)
-		if err != nil {
-			return err
 		}
-
+		aciBuilder = acibuilder.NewDiffACIBuilder(tmpdir, imagefs)
+	case s == 0:
+		aciBuilder = acibuilder.NewSimpleACIBuilder(imagefs)
 	}
 
 	mode := os.O_CREATE | os.O_WRONLY
@@ -88,9 +92,7 @@ func build(args []string) error {
 		fh.Close()
 	}()
 
-	ACIBuilder := acibuilder.NewDiffACIBuilder(tmpdir, imagefs)
-
-	err = ACIBuilder.Build(*im, fh)
+	err = aciBuilder.Build(*im, fh)
 	if err != nil {
 		return err
 	}
