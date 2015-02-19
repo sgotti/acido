@@ -72,9 +72,9 @@ func build(args []string) error {
 			}
 
 		}
-		aciBuilder = acibuilder.NewDiffACIBuilder(tmpdir, imagefs)
+		aciBuilder = acibuilder.NewDiffACIBuilder(filepath.Join(tmpdir, "rootfs"), filepath.Join(imagefs, "rootfs"))
 	case s == 0:
-		aciBuilder = acibuilder.NewSimpleACIBuilder(imagefs)
+		aciBuilder = acibuilder.NewSimpleACIBuilder(filepath.Join(imagefs, "rootfs"))
 	}
 
 	mode := os.O_CREATE | os.O_WRONLY
