@@ -25,7 +25,11 @@ func init() {
 }
 
 func runExtract(args []string) (exit int) {
-	ds := cas.NewStore(globalFlags.Dir)
+	ds, err := cas.NewStore(globalFlags.Dir)
+	if err != nil {
+		log.Errorf("error: %v", err)
+		return 1
+	}
 
 	imageIDStr := args[0]
 	imageID, err := types.NewHash(imageIDStr)

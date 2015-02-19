@@ -38,7 +38,10 @@ func build(args []string) error {
 		return fmt.Errorf("must provide imagefs and output file")
 	}
 
-	ds := cas.NewStore(globalFlags.Dir)
+	ds, err := cas.NewStore(globalFlags.Dir)
+	if err != nil {
+		return err
+	}
 
 	imagefs := args[0]
 	out := args[1]

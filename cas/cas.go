@@ -26,9 +26,9 @@ type ourCAS struct {
 	*cas.Store
 }
 
-func NewStore(base string) *ourCAS {
-	ds := cas.NewStore(base)
-	return &ourCAS{ds}
+func NewStore(base string) (*ourCAS, error) {
+	ds, err := cas.NewStore(base)
+	return &ourCAS{ds}, err
 }
 
 func (c *ourCAS) GetImageManifest(key string) (*schema.ImageManifest, error) {

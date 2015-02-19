@@ -27,7 +27,10 @@ func init() {
 }
 
 func startBuild(args []string) error {
-	ds := cas.NewStore(globalFlags.Dir)
+	ds, err := cas.NewStore(globalFlags.Dir)
+	if err != nil {
+		return err
+	}
 
 	baseImageIDStr := args[0]
 	baseImageID, err := types.NewHash(baseImageIDStr)

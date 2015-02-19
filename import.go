@@ -23,7 +23,11 @@ func init() {
 }
 
 func runImport(args []string) (exit int) {
-	ds := cas.NewStore(globalFlags.Dir)
+	ds, err := cas.NewStore(globalFlags.Dir)
+	if err != nil {
+		log.Errorf("error: %v", err)
+		return 1
+	}
 
 	for _, img := range args {
 		// import the local file if it exists
