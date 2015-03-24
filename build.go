@@ -6,12 +6,12 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/sgotti/acido/cas"
-	"github.com/sgotti/acido/pkg/aci"
 	"github.com/sgotti/acido/util"
 
-	"github.com/coreos/fleet/log"
-	"github.com/sgotti/acibuilder"
+	"github.com/sgotti/acido/Godeps/_workspace/src/github.com/coreos/fleet/log"
+	"github.com/sgotti/acido/Godeps/_workspace/src/github.com/coreos/rocket/cas"
+	"github.com/sgotti/acido/Godeps/_workspace/src/github.com/coreos/rocket/pkg/aci"
+	"github.com/sgotti/acido/Godeps/_workspace/src/github.com/sgotti/acibuilder"
 )
 
 var (

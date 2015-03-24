@@ -4,12 +4,13 @@ import (
 	"io/ioutil"
 	"path/filepath"
 
-	"github.com/sgotti/acido/cas"
-	"github.com/sgotti/acido/pkg/aci"
+	"github.com/sgotti/acido/util"
 
-	"github.com/appc/spec/schema"
-	"github.com/appc/spec/schema/types"
-	"github.com/coreos/fleet/log"
+	"github.com/sgotti/acido/Godeps/_workspace/src/github.com/appc/spec/schema"
+	"github.com/sgotti/acido/Godeps/_workspace/src/github.com/appc/spec/schema/types"
+	"github.com/sgotti/acido/Godeps/_workspace/src/github.com/coreos/fleet/log"
+	"github.com/sgotti/acido/Godeps/_workspace/src/github.com/coreos/rocket/cas"
+	"github.com/sgotti/acido/Godeps/_workspace/src/github.com/coreos/rocket/pkg/aci"
 )
 
 var (
@@ -33,20 +34,29 @@ func startBuild(args []string) error {
 	}
 
 	baseImageIDStr := args[0]
-	baseImageID, err := types.NewHash(baseImageIDStr)
-	if err != nil {
-		return err
-	}
 
 	tmpdir, err := ioutil.TempDir(globalFlags.WorkDir, "")
 	if err != nil {
 		return err
 	}
 	log.Debugf("tmpdir: %s", tmpdir)
-	baseim, err := ds.GetImageManifest(baseImageIDStr)
+
+	key, err := util.KeyFromArg(baseImageIDStr, ds)
 	if err != nil {
 		return err
 	}
+	log.Debugf("key: %s", key)
+
+	baseImageID, err := types.NewHash(key)
+	if err != nil {
+		return err
+	}
+
+	baseim, err := ds.GetImageManifest(key)
+	if err != nil {
+		return err
+	}
+	log.Debugf("baseim: %s", baseim)
 
 	err = aci.RenderACIWithImageID(*baseImageID, tmpdir, ds)
 	if err != nil {

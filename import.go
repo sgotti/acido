@@ -3,9 +3,9 @@ package main
 import (
 	"os"
 
-	"github.com/appc/spec/schema/types"
-	"github.com/coreos/fleet/log"
-	"github.com/coreos/rocket/cas"
+	"github.com/sgotti/acido/Godeps/_workspace/src/github.com/appc/spec/schema/types"
+	"github.com/sgotti/acido/Godeps/_workspace/src/github.com/coreos/fleet/log"
+	"github.com/sgotti/acido/Godeps/_workspace/src/github.com/coreos/rocket/cas"
 )
 
 var (
@@ -36,7 +36,7 @@ func runImport(args []string) (exit int) {
 			log.Errorf("error: %v", err)
 			return 1
 		}
-		key, err := ds.WriteACI(file)
+		key, err := ds.WriteACI(file, false)
 		file.Close()
 		if err != nil {
 			log.Errorf("error importing %s: %v", img, err)

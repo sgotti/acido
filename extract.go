@@ -3,11 +3,12 @@ package main
 import (
 	"io/ioutil"
 
-	"github.com/sgotti/acido/cas"
-	"github.com/sgotti/acido/pkg/aci"
+	"github.com/sgotti/acido/util"
 
-	"github.com/appc/spec/schema/types"
-	"github.com/coreos/fleet/log"
+	"github.com/sgotti/acido/Godeps/_workspace/src/github.com/appc/spec/schema/types"
+	"github.com/sgotti/acido/Godeps/_workspace/src/github.com/coreos/fleet/log"
+	"github.com/sgotti/acido/Godeps/_workspace/src/github.com/coreos/rocket/cas"
+	"github.com/sgotti/acido/Godeps/_workspace/src/github.com/coreos/rocket/pkg/aci"
 )
 
 var (
@@ -31,19 +32,26 @@ func runExtract(args []string) (exit int) {
 		return 1
 	}
 
-	imageIDStr := args[0]
-	imageID, err := types.NewHash(imageIDStr)
-	if err != nil {
-		log.Errorf("error: %v", err)
-		return 1
-	}
-
 	tmpdir, err := ioutil.TempDir(globalFlags.WorkDir, "")
 	if err != nil {
 		log.Errorf("error: %v", err)
 		return 1
 	}
 	log.Debugf("tmpdir: %s", tmpdir)
+
+	imageIDStr := args[0]
+	key, err := util.KeyFromArg(imageIDStr, ds)
+	if err != nil {
+		log.Errorf("error: %v", err)
+		return 1
+	}
+	log.Debugf("key: %s", key)
+
+	imageID, err := types.NewHash(key)
+	if err != nil {
+		log.Errorf("error: %v", err)
+		return 1
+	}
 
 	err = aci.RenderACIWithImageID(*imageID, tmpdir, ds)
 	if err != nil {

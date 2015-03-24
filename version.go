@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 
-	"github.com/coreos/rocket/version"
+	"github.com/sgotti/acido/version"
 )
 
 var cmdVersion = &Command{

@@ -41,7 +41,7 @@ Create a manifest file for this aci:
 $ cat /tmp/fedora21/manifest
 {
     "acKind": "ImageManifest",
-    "acVersion": "0.3.0",
+    "acVersion": "0.5.0",
     "name": "example.com/fedora",
     "labels": [
         {
@@ -75,6 +75,15 @@ INFO import.go:47: image: /tmp/fedora21.aci, hash: sha512-34e79f60f57fe909516129
 The returned hash value will be used in the next operations (until the discovery mechanism is implemented)
 
 ### Start a new build using the previous image as a base
+
+#### Using the app name
+```
+$ ./acido startbuild example.com/fedora,version=21.0.0
+INFO startbuild.go:39: tmpdir: /tmp/645016202
+INFO startbuild.go:52: Image extracted to /tmp/645016202
+```
+
+#### Using the app imageID
 ```
 $ ./acido startbuild sha512-34e79f60f57fe90951612975651562349ac5be20bef2ba8f9dd4900794d1647c
 INFO startbuild.go:39: tmpdir: /tmp/645016202
@@ -100,6 +109,53 @@ $ yum -y remove firewalld
 Container rootfs terminated by signal KILL.
 ```
 
+
+### Update the imagemanifest
+
+For example chaning the version to `21.0.1`:
+
+```
+{
+    "name": "example.com/fedora",
+    "acKind": "ImageManifest",
+    "acVersion": "0.5.0",
+    "labels": [
+        {
+            "name": "version",
+            "value": "21.0.1"
+        },
+        {
+            "name": "arch",
+            "value": "amd64"
+        },
+        {
+            "name": "os",
+            "value": "linux"
+        }
+    ],
+    "dependencies": [
+        {
+            "app": "example.com/fedora",
+            "imageID": "sha512-34e79f60f57fe90951612975651562349ac5be20bef2ba8f9dd4900794d1647c",
+            "labels": [
+                {
+                    "name": "version",
+                    "value": "21.0.0"
+                },
+                {
+                    "name": "arch",
+                    "value": "amd64"
+                },
+                {
+                    "name": "os",
+                    "value": "linux"
+                }
+            ]
+        }
+    ]
+}
+```
+
 ### Complete the build
 ```
 ./acido build /tmp/645016202 /tmp/fedora21-new.aci 
@@ -116,7 +172,7 @@ INFO import.go:47: image: /tmp/fedora21-new.aci, hash: sha512-7faaf487ee92c4b8ef
 ```
 
 ```
-./acido extract sha512-7faaf487ee92c4b8efb4a2148a98866de601cdac8f4ddb519e6213e4c3d52c4e
+./acido extract example.com/fedora,version=21.0.1
 ```
 
 You can test with a diff -r -q that the new extracted image directory rebuilt from its dependencies matches the directory used by the build in the previous step.

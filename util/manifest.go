@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"io/ioutil"
 
-	"github.com/appc/spec/schema"
+	"github.com/sgotti/acido/Godeps/_workspace/src/github.com/appc/spec/schema"
 )
 
 func LoadImageManifest(file string) (*schema.ImageManifest, error) {

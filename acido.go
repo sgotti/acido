@@ -6,7 +6,7 @@ import (
 	"os"
 	"text/tabwriter"
 
-	"github.com/coreos/fleet/log"
+	"github.com/sgotti/acido/Godeps/_workspace/src/github.com/coreos/fleet/log"
 )
 
 const (

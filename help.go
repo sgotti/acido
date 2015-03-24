@@ -7,7 +7,7 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/coreos/rocket/version"
+	"github.com/sgotti/acido/Godeps/_workspace/src/github.com/coreos/rocket/version"
 )
 
 var (

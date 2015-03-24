@@ -1,0 +1,145 @@
+{
+	"ImportPath": "github.com/sgotti/acido",
+	"GoVersion": "go1.4.2",
+	"Packages": [
+		"./..."
+	],
+	"Deps": [
+		{
+			"ImportPath": "github.com/GoogleCloudPlatform/kubernetes/pkg/api/resource",
+			"Comment": "v0.12.0-270-g53ec66c",
+			"Rev": "53ec66caf4e952a1384ec93b9f0cde37616e4caf"
+		},
+		{
+			"ImportPath": "github.com/appc/spec/aci",
+			"Comment": "v0.5.0-6-gacb00f3",
+			"Rev": "acb00f33bd2e423182f25888269e399bef75dd26"
+		},
+		{
+			"ImportPath": "github.com/appc/spec/discovery",
+			"Comment": "v0.5.0-6-gacb00f3",
+			"Rev": "acb00f33bd2e423182f25888269e399bef75dd26"
+		},
+		{
+			"ImportPath": "github.com/appc/spec/pkg/acirenderer",
+			"Comment": "v0.5.0-6-gacb00f3",
+			"Rev": "acb00f33bd2e423182f25888269e399bef75dd26"
+		},
+		{
+			"ImportPath": "github.com/appc/spec/pkg/tarheader",
+			"Comment": "v0.5.0-6-gacb00f3",
+			"Rev": "acb00f33bd2e423182f25888269e399bef75dd26"
+		},
+		{
+			"ImportPath": "github.com/appc/spec/schema",
+			"Comment": "v0.5.0-6-gacb00f3",
+			"Rev": "acb00f33bd2e423182f25888269e399bef75dd26"
+		},
+		{
+			"ImportPath": "github.com/camlistore/lock",
+			"Rev": "ae27720f340952636b826119b58130b9c1a847a0"
+		},
+		{
+			"ImportPath": "github.com/coreos/fleet/log",
+			"Comment": "v0.3.2-1053-g29651bd",
+			"Rev": "29651bdda43f7be2394de1958ec5ef038c25bb97"
+		},
+		{
+			"ImportPath": "github.com/coreos/go-semver/semver",
+			"Rev": "6fe83ccda8fb9b7549c9ab4ba47f47858bc950aa"
+		},
+		{
+			"ImportPath": "github.com/coreos/rocket/cas",
+			"Comment": "v0.4.2-30-ga215b3a",
+			"Rev": "a215b3a910b8b8a38fc9a8253241e220e668abf5"
+		},
+		{
+			"ImportPath": "github.com/coreos/rocket/pkg/aci",
+			"Comment": "v0.4.2-30-ga215b3a",
+			"Rev": "a215b3a910b8b8a38fc9a8253241e220e668abf5"
+		},
+		{
+			"ImportPath": "github.com/coreos/rocket/pkg/lock",
+			"Comment": "v0.4.2-30-ga215b3a",
+			"Rev": "a215b3a910b8b8a38fc9a8253241e220e668abf5"
+		},
+		{
+			"ImportPath": "github.com/coreos/rocket/pkg/tar",
+			"Comment": "v0.4.2-30-ga215b3a",
+			"Rev": "a215b3a910b8b8a38fc9a8253241e220e668abf5"
+		},
+		{
+			"ImportPath": "github.com/coreos/rocket/version",
+			"Comment": "v0.4.2-30-ga215b3a",
+			"Rev": "a215b3a910b8b8a38fc9a8253241e220e668abf5"
+		},
+		{
+			"ImportPath": "github.com/cznic/bufs",
+			"Rev": "3dcccbd7064a1689f9c093a988ea11ac00e21f51"
+		},
+		{
+			"ImportPath": "github.com/cznic/exp/lldb",
+			"Rev": "9b0e4be12fbdb7b843e0a658a04c35d160371789"
+		},
+		{
+			"ImportPath": "github.com/cznic/fileutil",
+			"Rev": "21ae57c9dce724a15e88bd9cd46d5668f3e880a5"
+		},
+		{
+			"ImportPath": "github.com/cznic/mathutil",
+			"Rev": "f9551431b78e71ee24939a1e9d8f49f43898b5cd"
+		},
+		{
+			"ImportPath": "github.com/cznic/ql",
+			"Rev": "fc1b91b82089d3f132fbed8a7c9f349c3133eb96"
+		},
+		{
+			"ImportPath": "github.com/cznic/sortutil",
+			"Rev": "d4401851b4c370f979b842fa1e45e0b3b718b391"
+		},
+		{
+			"ImportPath": "github.com/cznic/strutil",
+			"Rev": "97bc31f80ac4c9fa9c5dc5fea74c383858988ea2"
+		},
+		{
+			"ImportPath": "github.com/cznic/zappy",
+			"Rev": "47331054e4f96186e3ff772877c0443909368a45"
+		},
+		{
+			"ImportPath": "github.com/petar/GoLLRB/llrb",
+			"Rev": "53be0d36a84c2a886ca057d34b6aa4468df9ccb4"
+		},
+		{
+			"ImportPath": "github.com/peterbourgon/diskv",
+			"Rev": "72aa5da9f7d1125b480b83c6dc5ad09a1f04508c"
+		},
+		{
+			"ImportPath": "github.com/sgotti/acibuilder",
+			"Rev": "dfe41cd071e008b63cfbbd8c3a16e454fd0d0943"
+		},
+		{
+			"ImportPath": "github.com/sgotti/fsdiffer",
+			"Rev": "6a1ed1b038aee0b1c258cd175d6da97a9440322c"
+		},
+		{
+			"ImportPath": "github.com/spf13/pflag",
+			"Rev": "370c3171201099fa6b466db45c8a032cbce33d8d"
+		},
+		{
+			"ImportPath": "golang.org/x/crypto/cast5",
+			"Rev": "4ed45ec682102c643324fae5dff8dab085b6c300"
+		},
+		{
+			"ImportPath": "golang.org/x/crypto/openpgp",
+			"Rev": "4ed45ec682102c643324fae5dff8dab085b6c300"
+		},
+		{
+			"ImportPath": "golang.org/x/net/html",
+			"Rev": "cbcac7bb8415db9b6cb4d1ebab1dc9afbd688b97"
+		},
+		{
+			"ImportPath": "speter.net/go/exp/math/dec/inf",
+			"Rev": "42ca6cd68aa922bc3f32f1e056e61b65945d9ad7"
+		}
+	]
+}

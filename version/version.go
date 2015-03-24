@@ -1,6 +1,4 @@
-// +build !linux
-
-// Copyright 2015 CoreOS, Inc.
+// Copyright 2014 CoreOS, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,12 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// These functions are from github.com/docker/docker/pkg/system
+package version
 
-package tar
-
-import "syscall"
-
-func LUtimesNano(path string, ts []syscall.Timespec) error {
-	return ErrNotSupportedPlatform
-}
+const Version = "0.0.2+git"
